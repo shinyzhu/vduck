@@ -19,14 +19,24 @@ async function getOrConnectClient(serverId) {
 
   const client = new Client({ name: 'vduck', version: '1.0.0' });
 
+  // Build transport options with optional Bearer token auth
+  const transportOpts = {};
+  if (server.authToken) {
+    // Sanitize token to prevent header injection (strip CR/LF characters)
+    const safeToken = server.authToken.replace(/[\r\n]/g, '');
+    const headers = { Authorization: `Bearer ${safeToken}` };
+    transportOpts.requestInit = { headers };
+    transportOpts.eventSourceInit = { headers };
+  }
+
   // Try Streamable HTTP first, fall back to SSE
   let transport;
   try {
-    transport = new StreamableHTTPClientTransport(new URL(server.url));
+    transport = new StreamableHTTPClientTransport(new URL(server.url), transportOpts);
     await client.connect(transport);
   } catch {
     try {
-      transport = new SSEClientTransport(new URL(server.url));
+      transport = new SSEClientTransport(new URL(server.url), transportOpts);
       await client.connect(transport);
     } catch (err) {
       throw new Error(`Cannot connect to MCP server "${server.name}": ${err.message}`);
