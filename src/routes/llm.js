@@ -19,8 +19,8 @@ router.get('/', (req, res) => {
 // POST /api/llm
 router.post('/', (req, res) => {
   const { name, baseURL, apiKey, model, description } = req.body || {};
-  if (!name || !baseURL) {
-    return res.status(400).json({ error: 'name and baseURL are required' });
+  if (!name || !baseURL || !model) {
+    return res.status(400).json({ error: 'name, baseURL, and model are required' });
   }
   const provider = store.createLLMProvider({ name, baseURL, apiKey, model, description });
   res.status(201).json({ ...provider, apiKey: provider.apiKey ? '***' : '' });

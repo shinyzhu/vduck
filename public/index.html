@@ -661,12 +661,12 @@ function populateModelDropdown() {
     return;
   }
   sel.innerHTML = state.llmProviders.map((p, i) =>
-    `<option value="${escapeHtml(p.model || p.name)}" data-provider-id="${escapeHtml(p.id)}" ${i === 0 ? 'selected' : ''}>${escapeHtml(p.name)}${p.model ? ' (' + escapeHtml(p.model) + ')' : ''}</option>`
+    `<option value="${escapeHtml(p.model)}" data-provider-id="${escapeHtml(p.id)}" ${i === 0 ? 'selected' : ''}>${escapeHtml(p.name)} (${escapeHtml(p.model)})</option>`
   ).join('');
   // Auto-select first provider
   const first = state.llmProviders[0];
   state.selectedProviderId = first.id;
-  document.getElementById('conv-model').textContent = `Model: ${first.model || first.name}`;
+  document.getElementById('conv-model').textContent = `Model: ${first.model}`;
 }
 
 function renderLLMList() {
