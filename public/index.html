@@ -124,16 +124,6 @@
       <div id="conv-model" class="text-xs text-gray-500 truncate">No model selected</div>
     </div>
     <div class="flex items-center gap-2">
-      <!-- Model selector -->
-      <select id="model-input" title="Select model"
-        class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-2 py-1.5 w-44 focus:outline-none focus:border-accent transition-colors">
-        <option value="">Select model…</option>
-      </select>
-      <!-- Tools toggle -->
-      <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 hover:text-white transition-colors select-none" title="Enable/disable MCP tools">
-        <input type="checkbox" id="tools-toggle" class="w-4 h-4 rounded accent-accent" checked />
-        <span>Tools</span>
-      </label>
       <!-- Delete conv -->
       <button id="btn-delete-conv" class="hidden text-gray-500 hover:text-red-400 transition-colors p-1 rounded" title="Delete conversation">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -167,6 +157,27 @@
       <button id="btn-send" class="flex-shrink-0 p-1.5 rounded-xl bg-accent hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-white" title="Send">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
       </button>
+    </div>
+    <!-- Model & Tools selectors (below chat box) -->
+    <div class="max-w-3xl mx-auto flex items-center gap-2 mt-1.5 px-1">
+      <!-- Model selector -->
+      <select id="model-input" title="Select model"
+        class="bg-[#252d3d] border border-[#30363d] text-gray-400 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-accent transition-colors">
+        <option value="">Select model…</option>
+      </select>
+      <!-- Tools toggle dropdown -->
+      <div class="relative" id="tools-dropdown-wrap">
+        <button type="button" id="tools-toggle-btn" title="Select MCP tools for this chat"
+          class="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors select-none bg-[#252d3d] border border-[#30363d] rounded-lg px-2 py-1 focus:outline-none focus:border-accent">
+          <span>🔧</span>
+          <span id="tools-toggle-label">Tools</span>
+          <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div id="tools-dropdown" class="hidden absolute left-0 bottom-full mb-1 w-56 bg-[#1e2536] border border-[#30363d] rounded-xl shadow-2xl z-30 py-1 max-h-64 overflow-y-auto">
+          <div id="tools-dropdown-items" class="text-xs"></div>
+          <div id="tools-dropdown-empty" class="px-3 py-2 text-xs text-gray-600">No MCP servers configured</div>
+        </div>
+      </div>
     </div>
     <p class="text-center text-xs text-gray-600 mt-1.5">HiDestina may make mistakes. Verify important info.</p>
   </div>
@@ -281,6 +292,7 @@ let state = {
   llmProviders: [],
   mcpServers: [],
   selectedProviderId: null,
+  enabledMcpServerIds: null, // null = all enabled servers; array = specific IDs
   isStreaming: false,
 };
 
@@ -397,11 +409,56 @@ async function selectConversation(id) {
   document.getElementById('conv-model').textContent = conv.model ? `Model: ${conv.model}` : 'No model selected';
   document.getElementById('btn-delete-conv').classList.remove('hidden');
   document.getElementById('empty-state').style.display = 'none';
+
+  // Restore model selection for this conversation
+  restoreModelSelection(conv);
+
+  // Restore MCP server selections for this conversation
+  restoreMcpSelection(conv);
+
   scrollToBottom();
 }
 
+function restoreModelSelection(conv) {
+  const sel = document.getElementById('model-input');
+  if (conv.model && conv.providerId) {
+    // Try to match by provider ID
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].dataset.providerId === conv.providerId) {
+        sel.selectedIndex = i;
+        state.selectedProviderId = conv.providerId;
+        return;
+      }
+    }
+  }
+  if (conv.model) {
+    // Fallback: match by model name
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === conv.model) {
+        sel.selectedIndex = i;
+        state.selectedProviderId = sel.options[i].dataset.providerId || null;
+        return;
+      }
+    }
+  }
+  // No match - keep current selection
+}
+
+function restoreMcpSelection(conv) {
+  if (Array.isArray(conv.enabledMcpServers)) {
+    state.enabledMcpServerIds = [...conv.enabledMcpServers];
+  } else {
+    // null means all enabled servers (default)
+    state.enabledMcpServerIds = null;
+  }
+  renderToolsDropdown();
+}
+
 async function createNewConversation() {
-  const conv = await api('POST', '/conversations', { title: 'New Chat' });
+  const model = document.getElementById('model-input').value || '';
+  const providerId = state.selectedProviderId || '';
+  const enabledMcpServers = state.enabledMcpServerIds;
+  const conv = await api('POST', '/conversations', { title: 'New Chat', model, providerId, enabledMcpServers });
   state.conversations.unshift(conv);
   renderConversationList();
   await selectConversation(conv.id);
@@ -529,7 +586,8 @@ async function sendMessage() {
     return;
   }
 
-  const useTools = document.getElementById('tools-toggle').checked;
+  const useTools = getSelectedMcpServerIds().length > 0;
+  const enabledMcpServers = state.enabledMcpServerIds;
 
   // Clear input
   chatInput.value = '';
@@ -567,7 +625,7 @@ async function sendMessage() {
     const resp = await fetch(`/api/chat/${state.currentConvId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, providerId, model, useTools }),
+      body: JSON.stringify({ message: text, providerId, model, useTools, enabledMcpServers }),
     });
 
     if (!resp.ok) {
@@ -692,6 +750,14 @@ document.getElementById('model-input').addEventListener('change', function() {
   const providerId = selected ? selected.dataset.providerId : null;
   state.selectedProviderId = providerId || null;
   document.getElementById('conv-model').textContent = this.value ? `Model: ${this.value}` : 'No model selected';
+
+  // Save model selection to current conversation
+  if (state.currentConvId && this.value) {
+    api('PATCH', `/conversations/${state.currentConvId}`, {
+      model: this.value,
+      providerId: providerId || '',
+    }).catch(() => {});
+  }
 });
 
 document.getElementById('btn-add-llm').onclick = () => {
@@ -754,6 +820,7 @@ async function deleteLLMProvider(id) {
 async function loadMCPServers() {
   state.mcpServers = await api('GET', '/mcp');
   renderMCPList();
+  renderToolsDropdown();
 }
 
 function renderMCPList() {
@@ -886,6 +953,114 @@ async function refreshMCPServer(id) {
     toast(err.message, 'error');
   }
 }
+
+// ─── MCP Tools Dropdown (per-conversation) ────────────────────────────────────
+function renderToolsDropdown() {
+  const itemsEl = document.getElementById('tools-dropdown-items');
+  const emptyEl = document.getElementById('tools-dropdown-empty');
+  const labelEl = document.getElementById('tools-toggle-label');
+
+  const enabledServers = state.mcpServers.filter(s => s.enabled);
+  if (!enabledServers.length) {
+    itemsEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    labelEl.textContent = 'Tools';
+    return;
+  }
+
+  emptyEl.classList.add('hidden');
+  itemsEl.innerHTML = enabledServers.map(s => {
+    const checked = isMcpServerSelected(s.id);
+    return `
+      <label class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-[#252d3d] transition-colors">
+        <input type="checkbox" class="mcp-server-check w-3.5 h-3.5 rounded accent-accent" data-server-id="${escapeHtml(s.id)}" ${checked ? 'checked' : ''} />
+        <span class="text-gray-200 truncate">${escapeHtml(s.name)}</span>
+        ${s.tools?.length ? `<span class="text-gray-600 ml-auto flex-shrink-0">${s.tools.length}</span>` : ''}
+      </label>`;
+  }).join('');
+
+  // Attach change listeners
+  itemsEl.querySelectorAll('.mcp-server-check').forEach(cb => {
+    cb.addEventListener('change', onMcpServerToggle);
+  });
+
+  updateToolsLabel();
+}
+
+function isMcpServerSelected(serverId) {
+  if (state.enabledMcpServerIds === null) return true; // null = all enabled
+  return state.enabledMcpServerIds.includes(serverId);
+}
+
+function getSelectedMcpServerIds() {
+  const enabledServers = state.mcpServers.filter(s => s.enabled);
+  if (state.enabledMcpServerIds === null) return enabledServers.map(s => s.id);
+  return state.enabledMcpServerIds.filter(id => enabledServers.some(s => s.id === id));
+}
+
+function updateToolsLabel() {
+  const labelEl = document.getElementById('tools-toggle-label');
+  const selected = getSelectedMcpServerIds();
+  const enabledServers = state.mcpServers.filter(s => s.enabled);
+  if (!enabledServers.length) {
+    labelEl.textContent = 'Tools';
+  } else if (selected.length === 0) {
+    labelEl.textContent = 'No tools';
+  } else if (selected.length === enabledServers.length) {
+    labelEl.textContent = `Tools (${selected.length})`;
+  } else {
+    labelEl.textContent = `Tools (${selected.length}/${enabledServers.length})`;
+  }
+}
+
+function onMcpServerToggle(e) {
+  const serverId = e.target.dataset.serverId;
+  const enabledServers = state.mcpServers.filter(s => s.enabled);
+
+  // If currently null (all selected), initialize from all enabled
+  if (state.enabledMcpServerIds === null) {
+    state.enabledMcpServerIds = enabledServers.map(s => s.id);
+  }
+
+  if (e.target.checked) {
+    if (!state.enabledMcpServerIds.includes(serverId)) {
+      state.enabledMcpServerIds.push(serverId);
+    }
+  } else {
+    state.enabledMcpServerIds = state.enabledMcpServerIds.filter(id => id !== serverId);
+  }
+
+  // If all are selected, set back to null (default)
+  const selectedSet = new Set(state.enabledMcpServerIds);
+  if (selectedSet.size === enabledServers.length &&
+      enabledServers.every(s => selectedSet.has(s.id))) {
+    state.enabledMcpServerIds = null;
+  }
+
+  updateToolsLabel();
+
+  // Save to current conversation
+  if (state.currentConvId) {
+    api('PATCH', `/conversations/${state.currentConvId}`, {
+      enabledMcpServers: state.enabledMcpServerIds,
+    }).catch(() => {});
+  }
+}
+
+// Toggle dropdown visibility
+document.getElementById('tools-toggle-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  const dropdown = document.getElementById('tools-dropdown');
+  dropdown.classList.toggle('hidden');
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('tools-dropdown-wrap');
+  if (!wrap.contains(e.target)) {
+    document.getElementById('tools-dropdown').classList.add('hidden');
+  }
+});
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {

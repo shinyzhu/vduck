@@ -24,15 +24,26 @@ router.post('/:conversationId', async (req, res) => {
   const conv = store.getConversation(conversationId);
   if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
-  const { message, providerId, model: reqModel, useTools = true, options = {} } = req.body || {};
-  const model = reqModel || '';
+  const { message, providerId, model: reqModel, useTools = true, enabledMcpServers, options = {} } = req.body || {};
+  const model = reqModel || conv.model || '';
+  const effectiveProviderId = providerId || conv.providerId || undefined;
   if (!message || !model) {
     return res.status(400).json({ error: 'message and model are required' });
   }
 
-  // Persist model on the conversation so UI can display it
-  if (!conv.model) {
-    store.updateConversation(conversationId, { model });
+  // Persist model/provider on the conversation so UI can display it
+  const convUpdates = {};
+  if (model && model !== conv.model) convUpdates.model = model;
+  if (effectiveProviderId && effectiveProviderId !== conv.providerId) convUpdates.providerId = effectiveProviderId;
+  if (enabledMcpServers !== undefined) {
+    const prev = conv.enabledMcpServers;
+    const changed = enabledMcpServers === null !== (prev === null || prev === undefined) ||
+      (Array.isArray(enabledMcpServers) && Array.isArray(prev) &&
+        (enabledMcpServers.length !== prev.length || enabledMcpServers.some((id, i) => id !== prev[i])));
+    if (changed) convUpdates.enabledMcpServers = enabledMcpServers;
+  }
+  if (Object.keys(convUpdates).length > 0) {
+    store.updateConversation(conversationId, convUpdates);
   }
 
   // Persist the user message
@@ -61,16 +72,25 @@ router.post('/:conversationId', async (req, res) => {
     // Get MCP tools if requested
     let openaiTools = [];
     let toolToServer = {};
+    // Determine which MCP servers to use: per-conversation selection or all enabled
+    const effectiveMcpServers = Array.isArray(enabledMcpServers) ? enabledMcpServers : conv.enabledMcpServers;
     if (useTools) {
       try {
-        ({ openaiTools, toolToServer } = await mcpService.getAllEnabledTools());
+        ({ openaiTools, toolToServer } = await mcpService.getAllEnabledTools(
+          Array.isArray(effectiveMcpServers) ? effectiveMcpServers : undefined
+        ));
       } catch {
         // Tools unavailable, continue without them
       }
     }
 
-    // Inject skill instructions from enabled MCP servers as system messages
-    const enabledServers = store.listMCPServers().filter((s) => s.enabled && s.skill);
+    // Inject skill instructions from selected MCP servers as system messages
+    const selectedServerIds = Array.isArray(effectiveMcpServers) ? effectiveMcpServers : null;
+    const enabledServers = store.listMCPServers().filter((s) => {
+      if (!s.enabled || !s.skill) return false;
+      if (selectedServerIds) return selectedServerIds.includes(s.id);
+      return true;
+    });
     if (enabledServers.length > 0) {
       const skillContent = enabledServers
         .map((s) => `## ${s.name}\n\n${s.skill}`)
@@ -89,7 +109,7 @@ router.post('/:conversationId', async (req, res) => {
       let done = false;
 
       await llmService.streamCompletion({
-        providerId,
+        providerId: effectiveProviderId,
         model,
         messages,
         tools: openaiTools,
