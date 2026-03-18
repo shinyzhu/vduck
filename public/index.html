@@ -124,12 +124,10 @@
       <div id="conv-model" class="text-xs text-gray-500 truncate">No model selected</div>
     </div>
     <div class="flex items-center gap-2">
-      <!-- Model selector -->
+      <!-- Model input -->
       <div class="relative">
-        <select id="model-select" class="appearance-none bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-3 py-1.5 pr-7 focus:outline-none focus:border-accent transition-colors">
-          <option value="">Select model…</option>
-        </select>
-        <div class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</div>
+        <input id="model-input" type="text" placeholder="Model name…"
+          class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-3 py-1.5 w-44 focus:outline-none focus:border-accent transition-colors" />
       </div>
       <!-- Tools toggle -->
       <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 hover:text-white transition-colors select-none" title="Enable/disable MCP tools">
@@ -520,9 +518,9 @@ async function sendMessage() {
   }
 
   // Require a model
-  const model = document.getElementById('model-select').value;
+  const model = document.getElementById('model-input').value.trim();
   if (!model) {
-    toast('Please select a model first', 'error');
+    toast('Please enter a model name first', 'error');
     return;
   }
 
@@ -646,7 +644,8 @@ async function sendMessage() {
 async function loadLLMProviders() {
   state.llmProviders = await api('GET', '/llm');
   renderLLMList();
-  rebuildModelSelect();
+  // Auto-select first provider if available
+  state.selectedProviderId = state.llmProviders.length > 0 ? state.llmProviders[0].id : null;
 }
 
 function renderLLMList() {
@@ -667,17 +666,7 @@ function renderLLMList() {
   `).join('');
 }
 
-function rebuildModelSelect() {
-  const sel = document.getElementById('model-select');
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">Select model…</option>';
-
-  if (prev) sel.value = prev;
-}
-
-document.getElementById('model-select').addEventListener('change', function() {
-  const selected = this.options[this.selectedIndex];
-  state.selectedProviderId = selected?.dataset?.providerId || null;
+document.getElementById('model-input').addEventListener('input', function() {
   document.getElementById('conv-model').textContent = this.value ? `Model: ${this.value}` : 'No model selected';
 });
 
