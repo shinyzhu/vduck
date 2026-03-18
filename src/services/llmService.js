@@ -102,4 +102,20 @@ async function complete({ providerId, model, messages, tools, options = {} }) {
   return resp.choices[0].message;
 }
 
-module.exports = { streamCompletion, complete, buildClient };
+/**
+ * List available models from the provider.
+ * @param {string} [providerId]  provider id, or falsy to use env defaults
+ * @returns {Promise<Array<{id: string, owned_by?: string}>>}
+ */
+async function listModels(providerId) {
+  const client = buildClient(providerId);
+  const list = await client.models.list();
+  const models = [];
+  for await (const model of list) {
+    models.push({ id: model.id, owned_by: model.owned_by });
+  }
+  models.sort((a, b) => a.id.localeCompare(b.id));
+  return models;
+}
+
+module.exports = { streamCompletion, complete, buildClient, listModels };
