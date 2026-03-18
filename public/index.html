@@ -124,10 +124,16 @@
       <div id="conv-model" class="text-xs text-gray-500 truncate">No model selected</div>
     </div>
     <div class="flex items-center gap-2">
-      <!-- Model input -->
+      <!-- Provider selector -->
+      <select id="provider-select" title="Select LLM provider"
+        class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-2 py-1.5 w-36 focus:outline-none focus:border-accent transition-colors">
+        <option value="">Default</option>
+      </select>
+      <!-- Model selector (input + datalist for suggestions) -->
       <div class="relative">
-        <input id="model-input" type="text" placeholder="Model name…"
+        <input id="model-input" type="text" list="model-options" placeholder="Model name…"
           class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-3 py-1.5 w-44 focus:outline-none focus:border-accent transition-colors" />
+        <datalist id="model-options"></datalist>
       </div>
       <!-- Tools toggle -->
       <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 hover:text-white transition-colors select-none" title="Enable/disable MCP tools">
@@ -646,6 +652,33 @@ async function loadLLMProviders() {
   renderLLMList();
   // Auto-select first provider if available
   state.selectedProviderId = state.llmProviders.length > 0 ? state.llmProviders[0].id : null;
+  renderProviderSelect();
+  fetchModelsForProvider(state.selectedProviderId);
+}
+
+function renderProviderSelect() {
+  const sel = document.getElementById('provider-select');
+  sel.innerHTML = '<option value="">Default</option>' +
+    state.llmProviders.map(p =>
+      `<option value="${p.id}" ${p.id === state.selectedProviderId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
+    ).join('');
+}
+
+document.getElementById('provider-select').addEventListener('change', function () {
+  state.selectedProviderId = this.value || null;
+  fetchModelsForProvider(state.selectedProviderId);
+});
+
+async function fetchModelsForProvider(providerId) {
+  const datalist = document.getElementById('model-options');
+  datalist.innerHTML = '';
+  const endpoint = providerId ? `/llm/${providerId}/models` : '/llm/default/models';
+  try {
+    const models = await api('GET', endpoint);
+    datalist.innerHTML = models.map(m => `<option value="${escapeHtml(m.id)}">`).join('');
+  } catch {
+    // Silently ignore — user can still type a model name manually
+  }
 }
 
 function renderLLMList() {
