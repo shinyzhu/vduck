@@ -129,12 +129,11 @@
         class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-2 py-1.5 w-36 focus:outline-none focus:border-accent transition-colors">
         <option value="">Default</option>
       </select>
-      <!-- Model selector (input + datalist for suggestions) -->
-      <div class="relative">
-        <input id="model-input" type="text" list="model-options" placeholder="Model name…"
-          class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-3 py-1.5 w-44 focus:outline-none focus:border-accent transition-colors" />
-        <datalist id="model-options"></datalist>
-      </div>
+      <!-- Model selector -->
+      <select id="model-input" title="Select model"
+        class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-2 py-1.5 w-44 focus:outline-none focus:border-accent transition-colors">
+        <option value="">Select model…</option>
+      </select>
       <!-- Tools toggle -->
       <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 hover:text-white transition-colors select-none" title="Enable/disable MCP tools">
         <input type="checkbox" id="tools-toggle" class="w-4 h-4 rounded accent-accent" checked />
@@ -524,9 +523,9 @@ async function sendMessage() {
   }
 
   // Require a model
-  const model = document.getElementById('model-input').value.trim();
+  const model = document.getElementById('model-input').value;
   if (!model) {
-    toast('Please enter a model name first', 'error');
+    toast('Please select a model first', 'error');
     return;
   }
 
@@ -670,14 +669,22 @@ document.getElementById('provider-select').addEventListener('change', function (
 });
 
 async function fetchModelsForProvider(providerId) {
-  const datalist = document.getElementById('model-options');
-  datalist.innerHTML = '';
+  const sel = document.getElementById('model-input');
+  sel.innerHTML = '<option value="">Loading models…</option>';
   const endpoint = providerId ? `/llm/${providerId}/models` : '/llm/default/models';
   try {
     const models = await api('GET', endpoint);
-    datalist.innerHTML = models.map(m => `<option value="${escapeHtml(m.id)}">`).join('');
+    if (models.length) {
+      sel.innerHTML = models.map((m, i) => `<option value="${escapeHtml(m.id)}" ${i === 0 ? 'selected' : ''}>${escapeHtml(m.id)}</option>`).join('');
+      // Auto-select first model and update header label
+      document.getElementById('conv-model').textContent = `Model: ${models[0].id}`;
+    } else {
+      sel.innerHTML = '<option value="">No models available</option>';
+      document.getElementById('conv-model').textContent = 'No model selected';
+    }
   } catch {
-    // Silently ignore — user can still type a model name manually
+    sel.innerHTML = '<option value="">Failed to load models</option>';
+    document.getElementById('conv-model').textContent = 'No model selected';
   }
 }
 
@@ -699,7 +706,7 @@ function renderLLMList() {
   `).join('');
 }
 
-document.getElementById('model-input').addEventListener('input', function() {
+document.getElementById('model-input').addEventListener('change', function() {
   document.getElementById('conv-model').textContent = this.value ? `Model: ${this.value}` : 'No model selected';
 });
 
