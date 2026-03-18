@@ -124,24 +124,6 @@
       <div id="conv-model" class="text-xs text-gray-500 truncate">No model selected</div>
     </div>
     <div class="flex items-center gap-2">
-      <!-- Model selector -->
-      <select id="model-input" title="Select model"
-        class="bg-[#252d3d] border border-[#30363d] text-gray-200 text-sm rounded-lg px-2 py-1.5 w-44 focus:outline-none focus:border-accent transition-colors">
-        <option value="">Select model…</option>
-      </select>
-      <!-- Tools toggle dropdown -->
-      <div class="relative" id="tools-dropdown-wrap">
-        <button type="button" id="tools-toggle-btn" title="Select MCP tools for this chat"
-          class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors select-none bg-[#252d3d] border border-[#30363d] rounded-lg px-2 py-1.5 focus:outline-none focus:border-accent">
-          <span>🔧</span>
-          <span id="tools-toggle-label">Tools</span>
-          <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div id="tools-dropdown" class="hidden absolute right-0 top-full mt-1 w-56 bg-[#1e2536] border border-[#30363d] rounded-xl shadow-2xl z-30 py-1 max-h-64 overflow-y-auto">
-          <div id="tools-dropdown-items" class="text-xs"></div>
-          <div id="tools-dropdown-empty" class="px-3 py-2 text-xs text-gray-600">No MCP servers configured</div>
-        </div>
-      </div>
       <!-- Delete conv -->
       <button id="btn-delete-conv" class="hidden text-gray-500 hover:text-red-400 transition-colors p-1 rounded" title="Delete conversation">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -175,6 +157,27 @@
       <button id="btn-send" class="flex-shrink-0 p-1.5 rounded-xl bg-accent hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-white" title="Send">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
       </button>
+    </div>
+    <!-- Model & Tools selectors (below chat box) -->
+    <div class="max-w-3xl mx-auto flex items-center gap-2 mt-1.5 px-1">
+      <!-- Model selector -->
+      <select id="model-input" title="Select model"
+        class="bg-[#252d3d] border border-[#30363d] text-gray-400 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-accent transition-colors">
+        <option value="">Select model…</option>
+      </select>
+      <!-- Tools toggle dropdown -->
+      <div class="relative" id="tools-dropdown-wrap">
+        <button type="button" id="tools-toggle-btn" title="Select MCP tools for this chat"
+          class="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors select-none bg-[#252d3d] border border-[#30363d] rounded-lg px-2 py-1 focus:outline-none focus:border-accent">
+          <span>🔧</span>
+          <span id="tools-toggle-label">Tools</span>
+          <svg class="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div id="tools-dropdown" class="hidden absolute left-0 bottom-full mb-1 w-56 bg-[#1e2536] border border-[#30363d] rounded-xl shadow-2xl z-30 py-1 max-h-64 overflow-y-auto">
+          <div id="tools-dropdown-items" class="text-xs"></div>
+          <div id="tools-dropdown-empty" class="px-3 py-2 text-xs text-gray-600">No MCP servers configured</div>
+        </div>
+      </div>
     </div>
     <p class="text-center text-xs text-gray-600 mt-1.5">HiDestina may make mistakes. Verify important info.</p>
   </div>
