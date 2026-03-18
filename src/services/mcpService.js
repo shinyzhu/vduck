@@ -83,11 +83,19 @@ async function callTool(serverId, toolName, args) {
 }
 
 /**
- * Gather all tools from all enabled MCP servers, formatted for the OpenAI tool format.
+ * Gather all tools from enabled MCP servers, formatted for the OpenAI tool format.
+ * If serverIds is provided (array), only those servers are used; otherwise all enabled servers.
  * Returns { openaiTools, toolToServer } where toolToServer maps tool name -> server id.
  */
-async function getAllEnabledTools() {
-  const servers = store.listMCPServers().filter((s) => s.enabled);
+async function getAllEnabledTools(serverIds) {
+  let servers;
+  if (Array.isArray(serverIds)) {
+    servers = serverIds
+      .map((id) => store.getMCPServer(id))
+      .filter((s) => s && s.enabled);
+  } else {
+    servers = store.listMCPServers().filter((s) => s.enabled);
+  }
   const openaiTools = [];
   const toolToServer = {};
 
