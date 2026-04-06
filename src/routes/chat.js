@@ -24,11 +24,21 @@ router.post('/:conversationId', async (req, res) => {
   const conv = store.getConversation(conversationId);
   if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
-  const { message, providerId, model: reqModel, useTools = true, enabledMcpServers, enabledSkills, options = {} } = req.body || {};
+  const { message, files, providerId, model: reqModel, useTools = true, enabledMcpServers, enabledSkills, options = {} } = req.body || {};
   const model = reqModel || conv.model || '';
   const effectiveProviderId = providerId || conv.providerId || undefined;
-  if (!message || !model) {
-    return res.status(400).json({ error: 'message and model are required' });
+  if ((!message && (!files || files.length === 0)) || !model) {
+    return res.status(400).json({ error: 'message (or files) and model are required' });
+  }
+
+  // Validate and sanitise attached files
+  const validFiles = [];
+  if (Array.isArray(files)) {
+    for (const f of files) {
+      if (f && typeof f.name === 'string' && typeof f.content === 'string' && f.content.length <= 1024 * 1024) {
+        validFiles.push({ name: f.name.slice(0, 255), content: f.content });
+      }
+    }
   }
 
   // Persist model/provider on the conversation so UI can display it
@@ -53,8 +63,9 @@ router.post('/:conversationId', async (req, res) => {
     store.updateConversation(conversationId, convUpdates);
   }
 
-  // Persist the user message
-  store.addMessage(conversationId, { role: 'user', content: message });
+  // Persist the user message (store file metadata, not full content, to keep store lean)
+  const filesMeta = validFiles.length > 0 ? validFiles.map((f) => ({ name: f.name })) : undefined;
+  store.addMessage(conversationId, { role: 'user', content: message || '', files: filesMeta });
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -78,6 +89,16 @@ router.post('/:conversationId', async (req, res) => {
       if (m.name) msg.name = m.name;
       return msg;
     });
+
+    // Inject file content into the last user message for the LLM
+    if (validFiles.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      const fileBlocks = validFiles.map(
+        (f) => `[File: ${f.name}]\n\`\`\`\n${f.content}\n\`\`\``
+      ).join('\n\n');
+      const userText = lastMsg.content || '';
+      lastMsg.content = fileBlocks + (userText ? '\n\n' + userText : '');
+    }
 
     // Get MCP tools if requested
     let openaiTools = [];
