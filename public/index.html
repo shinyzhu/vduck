@@ -55,11 +55,22 @@
     #chat-input { resize: none; min-height: 48px; max-height: 220px; overflow-y: auto; }
 
     /* File attachment badges */
-    .file-badge { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.25em 0.65em; border-radius: 0.5rem; font-size: 0.75rem; background: #252d3d; border: 1px solid #30363d; color: #d1d5db; max-width: 180px; }
+    .file-badge { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.25em 0.65em; border-radius: 0.5rem; font-size: 0.75rem; background: #252d3d; border: 1px solid #30363d; color: #d1d5db; max-width: 180px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+    .file-badge:hover { border-color: #7c6aff80; }
+    .file-badge.file-badge-active { border-color: #7c6aff; background: #1e2536; }
     .file-badge .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .file-badge .file-remove { cursor: pointer; opacity: 0.6; transition: opacity 0.15s; font-size: 0.85em; }
     .file-badge .file-remove:hover { opacity: 1; }
     html:not(.dark) .file-badge { background: #e8edf5; border-color: #cbd5e1; color: #374151; }
+    html:not(.dark) .file-badge:hover { border-color: #7c6aff80; }
+    html:not(.dark) .file-badge.file-badge-active { border-color: #7c6aff; background: #dbeafe; }
+
+    /* File preview panel */
+    .file-preview-wrap { max-height: 200px; overflow-y: auto; border: 1px solid #30363d; border-radius: 0.5rem; background: #0d1117; margin-top: 0.375rem; }
+    .file-preview-wrap pre { margin: 0; padding: 0.5rem; font-size: 0.75rem; line-height: 1.5; }
+    .file-preview-wrap code { font-size: 0.75rem; }
+    .file-preview-wrap .prose-chat { padding: 0.5rem; font-size: 0.75rem; }
+    html:not(.dark) .file-preview-wrap { background: #f8fafc; border-color: #cbd5e1; }
 
     /* Tool badge */
     .tool-badge { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.15em 0.55em; border-radius: 999px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em; }
@@ -234,7 +245,7 @@
     </div>
     <div class="max-w-3xl mx-auto">
       <!-- Attached files preview -->
-      <div id="attached-files" class="hidden flex flex-wrap gap-1.5 mb-1.5 px-1"></div>
+      <div id="attached-files" class="hidden flex flex-col gap-1.5 mb-1.5 px-1"></div>
       <div class="flex gap-2 items-end bg-[#1e2536] border border-[#30363d] rounded-2xl px-4 py-2 focus-within:border-accent transition-colors shadow-lg">
         <input type="file" id="file-attach-input" multiple class="hidden" />
         <button id="btn-attach" type="button" class="flex-shrink-0 p-1.5 rounded-xl text-gray-500 hover:text-white transition-colors" title="Attach files">
@@ -446,6 +457,7 @@ let state = {
   enabledMcpServerIds: null, // null = all enabled servers; array = specific IDs
   enabledSkillIds: null, // null = all enabled skills; array = specific IDs
   attachedFiles: [], // files attached to the next message: [{name, content, size}]
+  previewFileIndex: -1, // index of file being previewed (-1 = none)
   isStreaming: false,
 };
 
@@ -677,7 +689,7 @@ function createMessageEl(msg) {
 
   if (msg.role === 'user') {
     const fileBadgesHtml = (msg.files && msg.files.length > 0)
-      ? `<div class="flex flex-wrap gap-1 mb-1.5">${msg.files.map(f => `<span class="file-badge"><span>📄</span><span class="file-name">${escapeHtml(f.name)}</span></span>`).join('')}</div>`
+      ? `<div class="flex flex-wrap gap-1 mb-1.5">${msg.files.map(f => `<span class="file-badge"><span>${getFileIcon(f.name)}</span><span class="file-name">${escapeHtml(f.name)}</span></span>`).join('')}</div>`
       : '';
     wrap.className = 'flex justify-end';
     wrap.innerHTML = `
@@ -776,6 +788,8 @@ btnSend.onclick = sendMessage;
 const MAX_FILE_SIZE = 1024 * 1024; // 1 MB per file
 const MAX_FILES = 10;
 const TEXT_FILE_EXTENSIONS = '.txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.log,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.zsh,.sql,.html,.css,.scss,.less,.vue,.svelte,.swift,.kt,.r,.m,.pl,.lua,.zig,.ex,.exs,.erl,.hs,.clj,.scala,.dart,.tf,.dockerfile,.makefile,.cmake,.gradle,.env,.gitignore,.editorconfig,.prettierrc';
+const FILE_ICONS = { md: '📝', json: '📋', yaml: '📦', yml: '📦', xml: '🏷️', csv: '📊', html: '🌐', css: '🎨', js: '🟨', ts: '🔷', py: '🐍', rb: '💎', go: '🔵', rs: '🦀', java: '☕', sh: '🐚', bash: '🐚', sql: '🗃️' };
+const FILE_LANGS = { md: 'markdown', json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', csv: 'plaintext', html: 'html', css: 'css', scss: 'scss', less: 'less', js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java', c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp', cs: 'csharp', php: 'php', sh: 'bash', bash: 'bash', zsh: 'bash', sql: 'sql', swift: 'swift', kt: 'kotlin', vue: 'html', svelte: 'html', lua: 'lua', scala: 'scala', dart: 'dart', toml: 'ini', ini: 'ini', cfg: 'ini', conf: 'ini' };
 fileAttachInput.setAttribute('accept', TEXT_FILE_EXTENSIONS);
 
 btnAttach.onclick = () => fileAttachInput.click();
@@ -815,12 +829,55 @@ fileAttachInput.addEventListener('change', () => {
 
 function removeAttachedFile(index) {
   state.attachedFiles.splice(index, 1);
+  // Reset preview if the removed file was being previewed or the index is now out of range
+  if (state.previewFileIndex === index || state.previewFileIndex >= state.attachedFiles.length) {
+    state.previewFileIndex = -1;
+  }
   renderAttachedFiles();
 }
 
 function clearAttachedFiles() {
   state.attachedFiles = [];
+  state.previewFileIndex = -1;
   renderAttachedFiles();
+}
+
+function getFileIcon(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return FILE_ICONS[ext] || '📄';
+}
+
+function getFileLanguage(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return FILE_LANGS[ext] || null;
+}
+
+function toggleFilePreview(index) {
+  state.previewFileIndex = (state.previewFileIndex === index) ? -1 : index;
+  renderAttachedFiles();
+}
+
+function renderFilePreview(file) {
+  const lang = getFileLanguage(file.name);
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+
+  let contentHtml;
+  if (ext === 'md') {
+    contentHtml = `<div class="prose-chat">${renderMarkdown(file.content)}</div>`;
+  } else if (lang) {
+    let code = file.content;
+    if (ext === 'json') {
+      try { code = JSON.stringify(JSON.parse(code), null, 2); } catch (_) { /* keep original */ }
+    }
+    const highlighted = (hljs.getLanguage(lang))
+      ? hljs.highlight(code, { language: lang }).value
+      : escapeHtml(code);
+    contentHtml = `<pre><code class="hljs language-${escapeHtml(lang)}">${highlighted}</code></pre>`;
+  } else {
+    contentHtml = `<pre><code>${escapeHtml(file.content)}</code></pre>`;
+  }
+
+  return `<div class="file-preview-wrap">${contentHtml}</div>`;
 }
 
 function renderAttachedFiles() {
@@ -830,13 +887,22 @@ function renderAttachedFiles() {
     return;
   }
   attachedFilesEl.classList.remove('hidden');
-  attachedFilesEl.innerHTML = state.attachedFiles.map((f, i) => `
-    <span class="file-badge" title="${escapeHtml(f.name)} (${formatFileSize(f.size)})">
-      <span>📄</span>
-      <span class="file-name">${escapeHtml(f.name)}</span>
-      <span class="file-remove" onclick="removeAttachedFile(${i})" title="Remove">✕</span>
+
+  let html = '<div class="flex flex-wrap gap-1.5">';
+  html += state.attachedFiles.map((f, i) => `
+    <span class="file-badge${state.previewFileIndex === i ? ' file-badge-active' : ''}" title="${escapeHtml(f.name)} (${formatFileSize(f.size)})">
+      <span>${getFileIcon(f.name)}</span>
+      <span class="file-name" onclick="toggleFilePreview(${i})">${escapeHtml(f.name)}</span>
+      <span class="file-remove" onclick="event.stopPropagation(); removeAttachedFile(${i})" title="Remove">✕</span>
     </span>
   `).join('');
+  html += '</div>';
+
+  if (state.previewFileIndex >= 0 && state.previewFileIndex < state.attachedFiles.length) {
+    html += renderFilePreview(state.attachedFiles[state.previewFileIndex]);
+  }
+
+  attachedFilesEl.innerHTML = html;
 }
 
 function formatFileSize(bytes) {
