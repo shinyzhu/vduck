@@ -54,6 +54,13 @@
     /* Input auto-grow */
     #chat-input { resize: none; min-height: 48px; max-height: 220px; overflow-y: auto; }
 
+    /* File attachment badges */
+    .file-badge { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.25em 0.65em; border-radius: 0.5rem; font-size: 0.75rem; background: #252d3d; border: 1px solid #30363d; color: #d1d5db; max-width: 180px; }
+    .file-badge .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-badge .file-remove { cursor: pointer; opacity: 0.6; transition: opacity 0.15s; font-size: 0.85em; }
+    .file-badge .file-remove:hover { opacity: 1; }
+    html:not(.dark) .file-badge { background: #e8edf5; border-color: #cbd5e1; color: #374151; }
+
     /* Tool badge */
     .tool-badge { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.15em 0.55em; border-radius: 999px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em; }
 
@@ -225,16 +232,24 @@
       <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
       <span class="ml-1">Thinking…</span>
     </div>
-    <div class="max-w-3xl mx-auto flex gap-2 items-end bg-[#1e2536] border border-[#30363d] rounded-2xl px-4 py-2 focus-within:border-accent transition-colors shadow-lg">
-      <textarea
-        id="chat-input"
-        placeholder="Message HiDestina… (Enter to send, Shift+Enter for newline)"
-        class="flex-1 bg-transparent text-gray-200 placeholder-gray-600 text-sm outline-none leading-relaxed py-1"
-        rows="1"
-      ></textarea>
-      <button id="btn-send" class="flex-shrink-0 p-1.5 rounded-xl bg-accent hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-white" title="Send">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-      </button>
+    <div class="max-w-3xl mx-auto">
+      <!-- Attached files preview -->
+      <div id="attached-files" class="hidden flex flex-wrap gap-1.5 mb-1.5 px-1"></div>
+      <div class="flex gap-2 items-end bg-[#1e2536] border border-[#30363d] rounded-2xl px-4 py-2 focus-within:border-accent transition-colors shadow-lg">
+        <input type="file" id="file-attach-input" multiple class="hidden" />
+        <button id="btn-attach" type="button" class="flex-shrink-0 p-1.5 rounded-xl text-gray-500 hover:text-white transition-colors" title="Attach files">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+        </button>
+        <textarea
+          id="chat-input"
+          placeholder="Message HiDestina… (Enter to send, Shift+Enter for newline)"
+          class="flex-1 bg-transparent text-gray-200 placeholder-gray-600 text-sm outline-none leading-relaxed py-1"
+          rows="1"
+        ></textarea>
+        <button id="btn-send" class="flex-shrink-0 p-1.5 rounded-xl bg-accent hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-white" title="Send">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+        </button>
+      </div>
     </div>
     <!-- Model & Tools selectors (below chat box) -->
     <div class="max-w-3xl mx-auto flex items-center gap-2 mt-1.5 px-1">
@@ -430,6 +445,7 @@ let state = {
   selectedProviderId: null,
   enabledMcpServerIds: null, // null = all enabled servers; array = specific IDs
   enabledSkillIds: null, // null = all enabled skills; array = specific IDs
+  attachedFiles: [], // files attached to the next message: [{name, content, size}]
   isStreaming: false,
 };
 
@@ -660,9 +676,13 @@ function createMessageEl(msg) {
   const wrap = document.createElement('div');
 
   if (msg.role === 'user') {
+    const fileBadgesHtml = (msg.files && msg.files.length > 0)
+      ? `<div class="flex flex-wrap gap-1 mb-1.5">${msg.files.map(f => `<span class="file-badge"><span>📄</span><span class="file-name">${escapeHtml(f.name)}</span></span>`).join('')}</div>`
+      : '';
     wrap.className = 'flex justify-end';
     wrap.innerHTML = `
       <div class="max-w-[80%] bg-accent/20 border border-accent/30 rounded-2xl rounded-br-md px-4 py-3">
+        ${fileBadgesHtml}
         <div class="text-sm text-gray-200 whitespace-pre-wrap">${escapeHtml(msg.content || '')}</div>
       </div>`;
   } else if (msg.role === 'assistant') {
@@ -734,6 +754,9 @@ function scrollToBottom() {
 // ─── Chat Input ───────────────────────────────────────────────────────────────
 const chatInput = document.getElementById('chat-input');
 const btnSend = document.getElementById('btn-send');
+const fileAttachInput = document.getElementById('file-attach-input');
+const btnAttach = document.getElementById('btn-attach');
+const attachedFilesEl = document.getElementById('attached-files');
 
 chatInput.addEventListener('input', () => {
   chatInput.style.height = 'auto';
@@ -749,10 +772,83 @@ chatInput.addEventListener('keydown', e => {
 
 btnSend.onclick = sendMessage;
 
+// ─── File Attachments ─────────────────────────────────────────────────────────
+const MAX_FILE_SIZE = 1024 * 1024; // 1 MB per file
+const MAX_FILES = 10;
+const TEXT_FILE_EXTENSIONS = '.txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.log,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.zsh,.sql,.html,.css,.scss,.less,.vue,.svelte,.swift,.kt,.r,.m,.pl,.lua,.zig,.ex,.exs,.erl,.hs,.clj,.scala,.dart,.tf,.dockerfile,.makefile,.cmake,.gradle,.env,.gitignore,.editorconfig,.prettierrc';
+fileAttachInput.setAttribute('accept', TEXT_FILE_EXTENSIONS);
+
+btnAttach.onclick = () => fileAttachInput.click();
+
+fileAttachInput.addEventListener('change', () => {
+  const files = Array.from(fileAttachInput.files || []);
+  if (!files.length) return;
+
+  if (state.attachedFiles.length + files.length > MAX_FILES) {
+    toast(`You can attach up to ${MAX_FILES} files at a time`, 'error');
+    fileAttachInput.value = '';
+    return;
+  }
+
+  let readCount = 0;
+  for (const file of files) {
+    if (file.size > MAX_FILE_SIZE) {
+      toast(`File "${file.name}" is too large (max 1 MB)`, 'error');
+      readCount++;
+      if (readCount === files.length) { fileAttachInput.value = ''; renderAttachedFiles(); }
+      continue;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.attachedFiles.push({ name: file.name, content: reader.result, size: file.size });
+      readCount++;
+      if (readCount === files.length) { fileAttachInput.value = ''; renderAttachedFiles(); }
+    };
+    reader.onerror = () => {
+      toast(`Failed to read "${file.name}"`, 'error');
+      readCount++;
+      if (readCount === files.length) { fileAttachInput.value = ''; renderAttachedFiles(); }
+    };
+    reader.readAsText(file);
+  }
+});
+
+function removeAttachedFile(index) {
+  state.attachedFiles.splice(index, 1);
+  renderAttachedFiles();
+}
+
+function clearAttachedFiles() {
+  state.attachedFiles = [];
+  renderAttachedFiles();
+}
+
+function renderAttachedFiles() {
+  if (state.attachedFiles.length === 0) {
+    attachedFilesEl.classList.add('hidden');
+    attachedFilesEl.innerHTML = '';
+    return;
+  }
+  attachedFilesEl.classList.remove('hidden');
+  attachedFilesEl.innerHTML = state.attachedFiles.map((f, i) => `
+    <span class="file-badge" title="${escapeHtml(f.name)} (${formatFileSize(f.size)})">
+      <span>📄</span>
+      <span class="file-name">${escapeHtml(f.name)}</span>
+      <span class="file-remove" onclick="removeAttachedFile(${i})" title="Remove">✕</span>
+    </span>
+  `).join('');
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 async function sendMessage() {
   if (state.isStreaming) return;
   const text = chatInput.value.trim();
-  if (!text) return;
+  if (!text && state.attachedFiles.length === 0) return;
 
   // Require a conversation
   if (!state.currentConvId) {
@@ -770,14 +866,22 @@ async function sendMessage() {
   const enabledMcpServers = state.enabledMcpServerIds;
   const enabledSkills = state.enabledSkillIds;
 
-  // Clear input
+  // Capture attached files before clearing
+  const files = state.attachedFiles.length > 0
+    ? state.attachedFiles.map(f => ({ name: f.name, content: f.content }))
+    : undefined;
+  const filesMeta = files ? files.map(f => ({ name: f.name })) : undefined;
+
+  // Clear input and attached files
   chatInput.value = '';
   chatInput.style.height = 'auto';
+  clearAttachedFiles();
   document.getElementById('empty-state').style.display = 'none';
 
-  // Append user message
-  appendMessage({ role: 'user', content: text });
-  state.currentMessages.push({ role: 'user', content: text });
+  // Append user message (with file badges if any)
+  const userMsg = { role: 'user', content: text, files: filesMeta };
+  appendMessage(userMsg);
+  state.currentMessages.push({ role: 'user', content: text, files: filesMeta });
   updateContextIndicator(state.currentMessages);
   scrollToBottom();
 
@@ -808,7 +912,7 @@ async function sendMessage() {
     const resp = await fetch(`/api/chat/${state.currentConvId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, providerId, model, useTools, enabledMcpServers, enabledSkills }),
+      body: JSON.stringify({ message: text, files, providerId, model, useTools, enabledMcpServers, enabledSkills }),
     });
 
     if (!resp.ok) {

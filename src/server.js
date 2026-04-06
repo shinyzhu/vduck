@@ -44,7 +44,7 @@ const staticLimiter = rateLimit({
 });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ limit: '12mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ── API Routes ────────────────────────────────────────────────────────────────

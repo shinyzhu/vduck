@@ -99,7 +99,7 @@ function deleteConversation(id) {
   return true;
 }
 
-function addMessage(conversationId, { role, content, toolCalls, toolCallId, name }) {
+function addMessage(conversationId, { role, content, toolCalls, toolCallId, name, files }) {
   const conv = store.conversations.find((c) => c.id === conversationId);
   if (!conv) return null;
   const msg = {
@@ -111,6 +111,7 @@ function addMessage(conversationId, { role, content, toolCalls, toolCallId, name
   if (toolCalls) msg.toolCalls = toolCalls;
   if (toolCallId) msg.toolCallId = toolCallId;
   if (name) msg.name = name;
+  if (files && files.length > 0) msg.files = files;
   conv.messages.push(msg);
   conv.messageCount = conv.messages.length;
   conv.updatedAt = new Date().toISOString();
