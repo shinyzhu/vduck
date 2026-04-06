@@ -7,6 +7,9 @@ const mcpService = require('../services/mcpService');
 
 const router = Router();
 
+// Map file extensions to language identifiers for code fences
+const FILE_LANG_MAP = { md: 'markdown', json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', csv: 'csv', html: 'html', css: 'css', scss: 'scss', js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java', c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp', cs: 'csharp', php: 'php', sh: 'bash', bash: 'bash', zsh: 'bash', sql: 'sql', swift: 'swift', kt: 'kotlin', lua: 'lua', scala: 'scala', dart: 'dart', toml: 'toml', ini: 'ini' };
+
 /**
  * POST /api/chat/:conversationId
  *
@@ -104,8 +107,7 @@ router.post('/:conversationId', async (req, res) => {
       const lastMsg = messages[messages.length - 1];
       const fileBlocks = validFiles.map((f) => {
         const ext = (f.name.split('.').pop() || '').toLowerCase();
-        const langMap = { md: 'markdown', json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', csv: 'csv', html: 'html', css: 'css', scss: 'scss', js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java', c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp', cs: 'csharp', php: 'php', sh: 'bash', bash: 'bash', zsh: 'bash', sql: 'sql', swift: 'swift', kt: 'kotlin', lua: 'lua', scala: 'scala', dart: 'dart', toml: 'toml', ini: 'ini' };
-        const lang = langMap[ext] || '';
+        const lang = FILE_LANG_MAP[ext] || '';
         return `[File: ${f.name}]\n\`\`\`${lang}\n${f.content}\n\`\`\``;
       }).join('\n\n');
       const userText = lastMsg.content || '';

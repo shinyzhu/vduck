@@ -788,6 +788,8 @@ btnSend.onclick = sendMessage;
 const MAX_FILE_SIZE = 1024 * 1024; // 1 MB per file
 const MAX_FILES = 10;
 const TEXT_FILE_EXTENSIONS = '.txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.log,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.zsh,.sql,.html,.css,.scss,.less,.vue,.svelte,.swift,.kt,.r,.m,.pl,.lua,.zig,.ex,.exs,.erl,.hs,.clj,.scala,.dart,.tf,.dockerfile,.makefile,.cmake,.gradle,.env,.gitignore,.editorconfig,.prettierrc';
+const FILE_ICONS = { md: '📝', json: '📋', yaml: '📦', yml: '📦', xml: '🏷️', csv: '📊', html: '🌐', css: '🎨', js: '🟨', ts: '🔷', py: '🐍', rb: '💎', go: '🔵', rs: '🦀', java: '☕', sh: '🐚', bash: '🐚', sql: '🗃️' };
+const FILE_LANGS = { md: 'markdown', json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', csv: 'plaintext', html: 'html', css: 'css', scss: 'scss', less: 'less', js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java', c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp', cs: 'csharp', php: 'php', sh: 'bash', bash: 'bash', zsh: 'bash', sql: 'sql', swift: 'swift', kt: 'kotlin', vue: 'html', svelte: 'html', lua: 'lua', scala: 'scala', dart: 'dart', toml: 'ini', ini: 'ini', cfg: 'ini', conf: 'ini' };
 fileAttachInput.setAttribute('accept', TEXT_FILE_EXTENSIONS);
 
 btnAttach.onclick = () => fileAttachInput.click();
@@ -827,10 +829,8 @@ fileAttachInput.addEventListener('change', () => {
 
 function removeAttachedFile(index) {
   state.attachedFiles.splice(index, 1);
-  // Reset preview if the previewed file was removed or index shifted
-  if (state.previewFileIndex >= state.attachedFiles.length) {
-    state.previewFileIndex = -1;
-  } else if (state.previewFileIndex === index) {
+  // Reset preview if the removed file was being previewed or the index is now out of range
+  if (state.previewFileIndex === index || state.previewFileIndex >= state.attachedFiles.length) {
     state.previewFileIndex = -1;
   }
   renderAttachedFiles();
@@ -844,14 +844,12 @@ function clearAttachedFiles() {
 
 function getFileIcon(name) {
   const ext = (name.split('.').pop() || '').toLowerCase();
-  const icons = { md: '📝', json: '📋', yaml: '📦', yml: '📦', xml: '🏷️', csv: '📊', html: '🌐', css: '🎨', js: '🟨', ts: '🔷', py: '🐍', rb: '💎', go: '🔵', rs: '🦀', java: '☕', sh: '🐚', bash: '🐚', sql: '🗃️' };
-  return icons[ext] || '📄';
+  return FILE_ICONS[ext] || '📄';
 }
 
 function getFileLanguage(name) {
   const ext = (name.split('.').pop() || '').toLowerCase();
-  const langs = { md: 'markdown', json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', csv: 'plaintext', html: 'html', css: 'css', scss: 'scss', less: 'less', js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java', c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp', cs: 'csharp', php: 'php', sh: 'bash', bash: 'bash', zsh: 'bash', sql: 'sql', swift: 'swift', kt: 'kotlin', vue: 'html', svelte: 'html', lua: 'lua', scala: 'scala', dart: 'dart', toml: 'ini', ini: 'ini', cfg: 'ini', conf: 'ini' };
-  return langs[ext] || null;
+  return FILE_LANGS[ext] || null;
 }
 
 function toggleFilePreview(index) {
