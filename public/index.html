@@ -60,6 +60,17 @@
     .file-badge .file-remove { cursor: pointer; opacity: 0.6; transition: opacity 0.15s; font-size: 0.85em; }
     .file-badge .file-remove:hover { opacity: 1; }
     html:not(.dark) .file-badge { background: #e8edf5; border-color: #cbd5e1; color: #374151; }
+    /* Image attachment previews */
+    .img-attach-wrap { position: relative; display: inline-block; }
+    .img-attach-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 0.5rem; border: 1px solid #30363d; display: block; cursor: pointer; }
+    .img-attach-wrap .file-remove { position: absolute; top: -6px; right: -6px; background: #1e2536; border: 1px solid #30363d; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 10px; color: #d1d5db; opacity: 0.85; transition: opacity 0.15s; }
+    .img-attach-wrap .file-remove:hover { opacity: 1; color: #f87171; }
+    /* Inline images in chat messages */
+    .msg-img { max-width: 320px; max-height: 240px; border-radius: 0.75rem; border: 1px solid #30363d; margin-top: 0.5rem; display: block; cursor: zoom-in; }
+    /* Lightbox */
+    #img-lightbox { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.85); align-items: center; justify-content: center; cursor: zoom-out; }
+    #img-lightbox.open { display: flex; }
+    #img-lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 0.75rem; box-shadow: 0 25px 60px rgba(0,0,0,0.5); }
 
     /* Tool badge */
     .tool-badge { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.15em 0.55em; border-radius: 999px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em; }
@@ -133,6 +144,10 @@
     html:not(.dark) .prose-chat th                           { background: #e8edf5; color: #1e293b; }
     html:not(.dark) .prose-chat th,
     html:not(.dark) .prose-chat td                           { border-color: #e2e8f0; }
+
+    /* Date input color fix for light mode */
+    html:not(.dark) input[type="date"]                       { color-scheme: light; }
+    input[type="date"]                                       { color-scheme: dark; }
   </style>
 </head>
 <body class="bg-[#0f1117] text-gray-200 flex h-screen overflow-hidden font-sans antialiased">
@@ -185,7 +200,10 @@
     <div id="tab-mcp" class="settings-panel hidden p-3 scroll-area max-h-72">
       <div class="flex items-center justify-between mb-2">
         <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">MCP Servers</span>
-        <button id="btn-add-mcp" class="text-accent hover:text-accent-light text-lg leading-none" title="Add MCP server">＋</button>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-mcp-presets" class="text-gray-500 hover:text-accent transition-colors text-sm" title="Browse common MCP presets">📋</button>
+          <button id="btn-add-mcp" class="text-accent hover:text-accent-light text-lg leading-none" title="Add MCP server">＋</button>
+        </div>
       </div>
       <div id="mcp-list" class="space-y-1.5"></div>
     </div>
@@ -193,7 +211,10 @@
     <div id="tab-skills" class="settings-panel hidden p-3 scroll-area max-h-72">
       <div class="flex items-center justify-between mb-2">
         <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Skills</span>
-        <button id="btn-add-skill" class="text-accent hover:text-accent-light text-lg leading-none" title="Add skill">＋</button>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-skill-templates" class="text-gray-500 hover:text-accent transition-colors text-sm" title="Browse travel skill templates">📋</button>
+          <button id="btn-add-skill" class="text-accent hover:text-accent-light text-lg leading-none" title="Add skill">＋</button>
+        </div>
       </div>
       <div id="skills-list" class="space-y-1.5"></div>
     </div>
@@ -209,12 +230,87 @@
       <div id="conv-model" class="text-xs text-gray-500 truncate">No model selected</div>
     </div>
     <div class="flex items-center gap-2">
+      <!-- Trip info toggle -->
+      <button id="btn-trip-info" class="hidden items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-[#252d3d]" title="Edit trip information">
+        <span>🗺</span>
+        <span id="trip-info-summary" class="max-w-[180px] truncate">Trip Info</span>
+      </button>
+      <!-- Export dropdown -->
+      <div class="relative" id="export-dropdown-wrap">
+        <button id="btn-export" class="hidden items-center gap-1 text-xs text-gray-500 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-[#252d3d]" title="Export conversation">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          <span>Export</span>
+        </button>
+        <div id="export-dropdown" class="hidden absolute right-0 top-full mt-1 w-40 bg-[#1e2536] border border-[#30363d] rounded-xl shadow-2xl z-30 py-1">
+          <button onclick="exportMarkdown()" class="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-[#252d3d] hover:text-white transition-colors flex items-center gap-2">
+            <span>📄</span> Markdown (.md)
+          </button>
+          <button onclick="exportPrint()" class="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-[#252d3d] hover:text-white transition-colors flex items-center gap-2">
+            <span>🖨</span> Print / PDF
+          </button>
+        </div>
+      </div>
       <!-- Delete conv -->
       <button id="btn-delete-conv" class="hidden text-gray-500 hover:text-red-400 transition-colors p-1 rounded" title="Delete conversation">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
       </button>
     </div>
   </header>
+
+  <!-- Trip info panel (collapsible) -->
+  <div id="trip-info-panel" class="hidden border-b border-[#252d3d] bg-[#161b27]/60 px-5 py-3">
+    <div class="max-w-3xl mx-auto">
+      <div class="flex items-center justify-between mb-2.5">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">✈️ Trip Info</span>
+        <button onclick="clearTravelMeta()" class="text-xs text-gray-600 hover:text-red-400 transition-colors">Clear</button>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5" id="trip-info-fields">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">🌍 Destination</label>
+          <input id="trip-destination" type="text" placeholder="e.g. Tokyo, Paris"
+            class="w-full bg-[#252d3d] border border-[#30363d] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-accent transition-colors" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">📅 Departure Date</label>
+          <input id="trip-departure" type="date"
+            class="w-full bg-[#252d3d] border border-[#30363d] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-accent transition-colors" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">📅 Return Date</label>
+          <input id="trip-return" type="date"
+            class="w-full bg-[#252d3d] border border-[#30363d] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-accent transition-colors" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">👥 Travelers</label>
+          <input id="trip-travelers" type="number" min="1" max="99" placeholder="e.g. 2"
+            class="w-full bg-[#252d3d] border border-[#30363d] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-accent transition-colors" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">💰 Budget</label>
+          <input id="trip-budget" type="text" placeholder="e.g. $3000/person"
+            class="w-full bg-[#252d3d] border border-[#30363d] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-accent transition-colors" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">🎯 Travel Style</label>
+          <select id="trip-style"
+            class="w-full bg-[#252d3d] border border-[#30363d] rounded-lg px-2.5 py-1.5 text-xs text-gray-400 focus:outline-none focus:border-accent transition-colors">
+            <option value="">Select…</option>
+            <option value="Leisure & Relaxation">☁️ Leisure & Relaxation</option>
+            <option value="Culture & History">🏛 Culture & History</option>
+            <option value="Nature & Scenery">🌿 Nature & Scenery</option>
+            <option value="Food & Gastronomy">🍜 Food & Gastronomy</option>
+            <option value="Shopping & Entertainment">🛍 Shopping & Entertainment</option>
+            <option value="Outdoor Adventure">🧗 Outdoor Adventure</option>
+            <option value="Family & Kids">👨‍👩‍👧 Family & Kids</option>
+            <option value="Honeymoon & Romance">💑 Honeymoon & Romance</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end mt-2.5">
+        <button onclick="saveTravelMeta()" class="bg-accent hover:bg-accent-dark text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors">Save Trip Info</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Messages -->
   <div class="flex-1 overflow-y-auto px-4 py-6" id="messages-area">
@@ -430,8 +526,45 @@
   </div>
 </div>
 
+<!-- Skill Templates Modal -->
+<div id="modal-skill-templates" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+  <div class="bg-[#1e2536] border border-[#30363d] rounded-2xl shadow-2xl w-full max-w-2xl pointer-events-auto animate-slide-up flex flex-col max-h-[85vh]">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-[#30363d] flex-shrink-0">
+      <div>
+        <h3 class="font-semibold text-white text-lg">✈️ Travel Skill Templates</h3>
+        <p class="text-xs text-gray-500 mt-0.5">Pick a template to pre-fill the skill form — edit before saving</p>
+      </div>
+      <button onclick="closeModal()" class="text-gray-500 hover:text-white transition-colors text-xl leading-none">×</button>
+    </div>
+    <div class="overflow-y-auto p-5 flex-1">
+      <div id="skill-templates-grid" class="grid grid-cols-2 gap-3"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MCP Presets Modal -->
+<div id="modal-mcp-presets" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+  <div class="bg-[#1e2536] border border-[#30363d] rounded-2xl shadow-2xl w-full max-w-2xl pointer-events-auto animate-slide-up flex flex-col max-h-[85vh]">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-[#30363d] flex-shrink-0">
+      <div>
+        <h3 class="font-semibold text-white text-lg">🔧 Common MCP Server Presets</h3>
+        <p class="text-xs text-gray-500 mt-0.5">Pick a preset to pre-fill the form — edit URL and token before saving</p>
+      </div>
+      <button onclick="closeModal()" class="text-gray-500 hover:text-white transition-colors text-xl leading-none">×</button>
+    </div>
+    <div class="overflow-y-auto p-5 flex-1">
+      <div id="mcp-presets-grid" class="grid grid-cols-2 gap-3"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast notifications -->
 <div id="toast-container" class="fixed bottom-4 right-4 z-[100] space-y-2"></div>
+
+<!-- Image Lightbox -->
+<div id="img-lightbox" onclick="closeLightbox()">
+  <img id="img-lightbox-src" src="" alt="preview" />
+</div>
 
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -447,6 +580,7 @@ let state = {
   enabledSkillIds: null, // null = all enabled skills; array = specific IDs
   attachedFiles: [], // files attached to the next message: [{name, content, size}]
   isStreaming: false,
+  travelMeta: null, // current conversation's travel metadata
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -561,6 +695,10 @@ async function selectConversation(id) {
   renderMessages(conv.messages);
   document.getElementById('conv-title').textContent = conv.title || 'New Chat';
   document.getElementById('conv-model').textContent = conv.model ? `Model: ${conv.model}` : 'No model selected';
+  document.getElementById('btn-trip-info').classList.remove('hidden');
+  document.getElementById('btn-trip-info').classList.add('flex');
+  document.getElementById('btn-export').classList.remove('hidden');
+  document.getElementById('btn-export').classList.add('flex');
   document.getElementById('btn-delete-conv').classList.remove('hidden');
   document.getElementById('empty-state').style.display = 'none';
 
@@ -572,6 +710,9 @@ async function selectConversation(id) {
 
   // Restore skill selections for this conversation
   restoreSkillSelection(conv);
+
+  // Restore travel metadata for this conversation
+  restoreTravelMeta(conv);
 
   // Update context indicator
   updateContextIndicator(state.currentMessages);
@@ -647,6 +788,12 @@ async function deleteConversation(id) {
     document.getElementById('conv-title').textContent = 'Select or start a chat';
     document.getElementById('conv-model').textContent = 'No model selected';
     document.getElementById('btn-delete-conv').classList.add('hidden');
+    document.getElementById('btn-trip-info').classList.add('hidden');
+    document.getElementById('btn-trip-info').classList.remove('flex');
+    document.getElementById('btn-export').classList.add('hidden');
+    document.getElementById('btn-export').classList.remove('flex');
+    document.getElementById('trip-info-panel').classList.add('hidden');
+    state.travelMeta = null;
     updateContextIndicator([]);
   }
   renderConversationList();
@@ -676,13 +823,24 @@ function createMessageEl(msg) {
   const wrap = document.createElement('div');
 
   if (msg.role === 'user') {
-    const fileBadgesHtml = (msg.files && msg.files.length > 0)
-      ? `<div class="flex flex-wrap gap-1 mb-1.5">${msg.files.map(f => `<span class="file-badge"><span>📄</span><span class="file-name">${escapeHtml(f.name)}</span></span>`).join('')}</div>`
+    // Separate image files from text files
+    const imgFiles = (msg.files || []).filter(f => f.isImage);
+    const txtFiles = (msg.files || []).filter(f => !f.isImage);
+    const fileBadgesHtml = txtFiles.length > 0
+      ? `<div class="flex flex-wrap gap-1 mb-1.5">${txtFiles.map(f => `<span class="file-badge"><span>📄</span><span class="file-name">${escapeHtml(f.name)}</span></span>`).join('')}</div>`
+      : '';
+    // Inline image thumbnails (use dataUrl if present, else just name)
+    const imgHtml = imgFiles.length > 0
+      ? imgFiles.map(f => f.dataUrl
+          ? `<img src="${escapeHtml(f.dataUrl)}" alt="${escapeHtml(f.name)}" class="msg-img" onclick="openLightbox(this.src)" title="${escapeHtml(f.name)}" />`
+          : `<span class="file-badge"><span>🖼</span><span class="file-name">${escapeHtml(f.name)}</span></span>`
+        ).join('')
       : '';
     wrap.className = 'flex justify-end';
     wrap.innerHTML = `
       <div class="max-w-[80%] bg-accent/20 border border-accent/30 rounded-2xl rounded-br-md px-4 py-3">
         ${fileBadgesHtml}
+        ${imgHtml}
         <div class="text-sm text-gray-200 whitespace-pre-wrap">${escapeHtml(msg.content || '')}</div>
       </div>`;
   } else if (msg.role === 'assistant') {
@@ -773,10 +931,12 @@ chatInput.addEventListener('keydown', e => {
 btnSend.onclick = sendMessage;
 
 // ─── File Attachments ─────────────────────────────────────────────────────────
-const MAX_FILE_SIZE = 1024 * 1024; // 1 MB per file
+const MAX_FILE_SIZE = 1024 * 1024; // 1 MB per text file
+const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4 MB per image (base64)
 const MAX_FILES = 10;
 const TEXT_FILE_EXTENSIONS = '.txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.log,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.zsh,.sql,.html,.css,.scss,.less,.vue,.svelte,.swift,.kt,.r,.m,.pl,.lua,.zig,.ex,.exs,.erl,.hs,.clj,.scala,.dart,.tf,.dockerfile,.makefile,.cmake,.gradle,.env,.gitignore,.editorconfig,.prettierrc';
-fileAttachInput.setAttribute('accept', TEXT_FILE_EXTENSIONS);
+const IMAGE_EXTENSIONS = '.jpg,.jpeg,.png,.gif,.webp,.bmp';
+fileAttachInput.setAttribute('accept', TEXT_FILE_EXTENSIONS + ',' + IMAGE_EXTENSIONS);
 
 btnAttach.onclick = () => fileAttachInput.click();
 
@@ -791,25 +951,40 @@ fileAttachInput.addEventListener('change', () => {
   }
 
   let readCount = 0;
+  const total = files.length;
+
   for (const file of files) {
-    if (file.size > MAX_FILE_SIZE) {
-      toast(`File "${file.name}" is too large (max 1 MB)`, 'error');
+    const isImage = file.type.startsWith('image/');
+    const sizeLimit = isImage ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
+    const limitLabel = isImage ? '4 MB' : '1 MB';
+
+    if (file.size > sizeLimit) {
+      toast(`File "${file.name}" is too large (max ${limitLabel})`, 'error');
       readCount++;
-      if (readCount === files.length) { fileAttachInput.value = ''; renderAttachedFiles(); }
+      if (readCount === total) { fileAttachInput.value = ''; renderAttachedFiles(); }
       continue;
     }
+
     const reader = new FileReader();
     reader.onload = () => {
-      state.attachedFiles.push({ name: file.name, content: reader.result, size: file.size });
+      if (isImage) {
+        state.attachedFiles.push({ name: file.name, dataUrl: reader.result, size: file.size, isImage: true, mimeType: file.type });
+      } else {
+        state.attachedFiles.push({ name: file.name, content: reader.result, size: file.size, isImage: false });
+      }
       readCount++;
-      if (readCount === files.length) { fileAttachInput.value = ''; renderAttachedFiles(); }
+      if (readCount === total) { fileAttachInput.value = ''; renderAttachedFiles(); }
     };
     reader.onerror = () => {
       toast(`Failed to read "${file.name}"`, 'error');
       readCount++;
-      if (readCount === files.length) { fileAttachInput.value = ''; renderAttachedFiles(); }
+      if (readCount === total) { fileAttachInput.value = ''; renderAttachedFiles(); }
     };
-    reader.readAsText(file);
+    if (isImage) {
+      reader.readAsDataURL(file);
+    } else {
+      reader.readAsText(file);
+    }
   }
 });
 
@@ -830,19 +1005,34 @@ function renderAttachedFiles() {
     return;
   }
   attachedFilesEl.classList.remove('hidden');
-  attachedFilesEl.innerHTML = state.attachedFiles.map((f, i) => `
-    <span class="file-badge" title="${escapeHtml(f.name)} (${formatFileSize(f.size)})">
+  attachedFilesEl.innerHTML = state.attachedFiles.map((f, i) => {
+    if (f.isImage) {
+      return `<span class="img-attach-wrap" title="${escapeHtml(f.name)} (${formatFileSize(f.size)})">
+        <img src="${escapeHtml(f.dataUrl)}" alt="${escapeHtml(f.name)}" class="img-attach-thumb" onclick="openLightbox('${escapeHtml(f.dataUrl)}')" />
+        <span class="file-remove" onclick="removeAttachedFile(${i})" title="Remove">✕</span>
+      </span>`;
+    }
+    return `<span class="file-badge" title="${escapeHtml(f.name)} (${formatFileSize(f.size)})">
       <span>📄</span>
       <span class="file-name">${escapeHtml(f.name)}</span>
       <span class="file-remove" onclick="removeAttachedFile(${i})" title="Remove">✕</span>
-    </span>
-  `).join('');
+    </span>`;
+  }).join('');
 }
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function openLightbox(src) {
+  document.getElementById('img-lightbox-src').src = src;
+  document.getElementById('img-lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('img-lightbox').classList.remove('open');
+  document.getElementById('img-lightbox-src').src = '';
 }
 
 async function sendMessage() {
@@ -868,9 +1058,14 @@ async function sendMessage() {
 
   // Capture attached files before clearing
   const files = state.attachedFiles.length > 0
-    ? state.attachedFiles.map(f => ({ name: f.name, content: f.content }))
+    ? state.attachedFiles.map(f => f.isImage
+        ? { name: f.name, dataUrl: f.dataUrl, mimeType: f.mimeType, isImage: true }
+        : { name: f.name, content: f.content })
     : undefined;
-  const filesMeta = files ? files.map(f => ({ name: f.name })) : undefined;
+  // For display in chat: keep dataUrl so thumbnails render immediately
+  const filesMeta = files ? files.map(f => f.isImage
+    ? { name: f.name, isImage: true, dataUrl: f.dataUrl }
+    : { name: f.name }) : undefined;
 
   // Clear input and attached files
   chatInput.value = '';
@@ -912,7 +1107,7 @@ async function sendMessage() {
     const resp = await fetch(`/api/chat/${state.currentConvId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, files, providerId, model, useTools, enabledMcpServers, enabledSkills }),
+      body: JSON.stringify({ message: text, files, providerId, model, useTools, enabledMcpServers, enabledSkills, travelMeta: state.travelMeta }),
     });
 
     if (!resp.ok) {
@@ -1607,6 +1802,559 @@ document.getElementById('skills-toggle-btn').addEventListener('click', function(
   const dropdown = document.getElementById('skills-dropdown');
   dropdown.classList.toggle('hidden');
 });
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+document.getElementById('btn-export').addEventListener('click', function(e) {
+  e.stopPropagation();
+  document.getElementById('export-dropdown').classList.toggle('hidden');
+});
+
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('export-dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('export-dropdown').classList.add('hidden');
+  }
+});
+
+function buildExportMessages() {
+  // Only user + assistant messages, skip tool/system
+  return state.currentMessages.filter(m => m.role === 'user' || m.role === 'assistant');
+}
+
+function buildTravelMetaBlock() {
+  const meta = state.travelMeta;
+  if (!meta) return '';
+  const parts = [];
+  if (meta.destination) parts.push(`Destination: ${meta.destination}`);
+  if (meta.departureDate && meta.returnDate) {
+    // Calculate trip length
+    const dep = new Date(meta.departureDate);
+    const ret = new Date(meta.returnDate);
+    const days = Math.round((ret - dep) / (1000 * 60 * 60 * 24)) + 1;
+    parts.push(`Dates: ${meta.departureDate} → ${meta.returnDate} (${days} days)`);
+  } else if (meta.departureDate) {
+    parts.push(`Departure: ${meta.departureDate}`);
+  }
+  if (meta.travelers) parts.push(`Travelers: ${meta.travelers}`);
+  if (meta.budget) parts.push(`Budget: ${meta.budget}`);
+  if (meta.style) parts.push(`Style: ${meta.style}`);
+  return parts.join('  ·  ');
+}
+
+function exportMarkdown() {
+  document.getElementById('export-dropdown').classList.add('hidden');
+  if (!state.currentConvId) return;
+
+  const title = document.getElementById('conv-title').textContent || 'HiDestina Trip';
+  const model = document.getElementById('conv-model').textContent || '';
+  const metaBlock = buildTravelMetaBlock();
+  const messages = buildExportMessages();
+  const now = new Date().toLocaleString('en-US');
+
+  let md = `# ${title}\n\n`;
+  if (metaBlock) md += `> ${metaBlock}\n\n`;
+  md += `---\n\n`;
+
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      const files = msg.files && msg.files.length > 0
+        ? `\n\n*Attachments: ${msg.files.map(f => f.name).join(', ')}*`
+        : '';
+      md += `**You:**\n\n${msg.content || ''}${files}\n\n`;
+    } else if (msg.role === 'assistant') {
+      md += `**HiDestina:**\n\n${msg.content || ''}\n\n`;
+    }
+    md += `---\n\n`;
+  }
+
+  md += `*Exported: ${now}*`;
+  if (model && model !== 'No model selected') md += `  ·  *${model}*`;
+  md += `\n`;
+
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const filename = (title.replace(/[^\w\s-]/g, '').trim() || 'hidestina') + '.md';
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Markdown file exported', 'success');
+}
+
+function exportPrint() {
+  document.getElementById('export-dropdown').classList.add('hidden');
+  if (!state.currentConvId) return;
+
+  const title = document.getElementById('conv-title').textContent || 'HiDestina Trip';
+  const model = document.getElementById('conv-model').textContent || '';
+  const metaBlock = buildTravelMetaBlock();
+  const messages = buildExportMessages();
+  const now = new Date().toLocaleString('en-US');
+
+  let bodyHtml = '';
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      const files = msg.files && msg.files.length > 0
+        ? `<p class="files">📎 Attachments: ${msg.files.map(f => escapeHtml(f.name)).join(', ')}</p>`
+        : '';
+      bodyHtml += `<div class="msg user"><div class="label">You</div><div class="content">${escapeHtml(msg.content || '').replace(/\n/g, '<br>')}${files}</div></div>`;
+    } else if (msg.role === 'assistant') {
+      // Render markdown for assistant messages
+      const rendered = marked.parse(msg.content || '');
+      bodyHtml += `<div class="msg assistant"><div class="label">✈️ HiDestina</div><div class="content prose">${rendered}</div></div>`;
+    }
+  }
+
+  const printHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.7; color: #1e293b; padding: 40px; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 700; color: #0f172a; margin-bottom: 0.25rem; }
+    .meta { font-size: 0.8rem; color: #64748b; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid #e2e8f0; }
+    .msg { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+    .msg.user .label { color: #6366f1; }
+    .msg.assistant .label { color: #0ea5e9; }
+    .content { padding: 0.75rem 1rem; border-radius: 0.5rem; }
+    .msg.user .content { background: #f1f5f9; border-left: 3px solid #6366f1; }
+    .msg.assistant .content { background: #f8fafc; border-left: 3px solid #0ea5e9; }
+    .files { font-size: 0.8rem; color: #64748b; margin-top: 0.4rem; }
+    /* Prose */
+    .prose p { margin: 0 0 0.65em; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose h1,.prose h2,.prose h3 { font-weight: 600; margin: 0.75em 0 0.4em; color: #0f172a; }
+    .prose h1 { font-size: 1.2em; }
+    .prose h2 { font-size: 1.1em; }
+    .prose h3 { font-size: 1em; }
+    .prose ul,.prose ol { padding-left: 1.5em; margin: 0.4em 0; }
+    .prose li { margin: 0.2em 0; }
+    .prose pre { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 0.375rem; padding: 0.75rem; overflow-x: auto; margin: 0.5em 0; font-size: 0.85em; }
+    .prose code { background: #f1f5f9; padding: 0.1em 0.3em; border-radius: 0.25rem; font-size: 0.85em; }
+    .prose pre code { background: transparent; padding: 0; }
+    .prose table { width: 100%; border-collapse: collapse; margin: 0.5em 0; font-size: 0.9em; }
+    .prose th,.prose td { border: 1px solid #e2e8f0; padding: 0.35em 0.65em; }
+    .prose th { background: #f1f5f9; font-weight: 600; }
+    .prose blockquote { border-left: 3px solid #cbd5e1; padding-left: 0.75em; color: #64748b; margin: 0.5em 0; }
+    .prose a { color: #6366f1; }
+    .footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }
+    @media print {
+      body { padding: 20px; }
+      .msg { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>✈️ ${escapeHtml(title)}</h1>
+  ${metaBlock ? `<div class="meta">${escapeHtml(metaBlock)}</div>` : '<div class="meta" style="margin-top:0.5rem"></div>'}
+  ${bodyHtml}
+  <div class="footer">Exported: ${now}${model && model !== 'No model selected' ? ' &nbsp;·&nbsp; ' + escapeHtml(model) : ''}</div>
+  <script>window.onload = function() { window.print(); }<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(printHtml);
+    win.document.close();
+  } else {
+    toast('Please allow pop-ups to use the print feature', 'error');
+  }
+}
+
+// ─── Travel Metadata ──────────────────────────────────────────────────────────
+function restoreTravelMeta(conv) {
+  state.travelMeta = conv.travelMeta || null;
+  const meta = state.travelMeta || {};
+  document.getElementById('trip-destination').value = meta.destination || '';
+  document.getElementById('trip-departure').value = meta.departureDate || '';
+  document.getElementById('trip-return').value = meta.returnDate || '';
+  document.getElementById('trip-travelers').value = meta.travelers || '';
+  document.getElementById('trip-budget').value = meta.budget || '';
+  document.getElementById('trip-style').value = meta.style || '';
+  updateTripInfoSummary(meta);
+}
+
+function updateTripInfoSummary(meta) {
+  const summaryEl = document.getElementById('trip-info-summary');
+  const parts = [];
+  if (meta && meta.destination) parts.push(meta.destination);
+  if (meta && meta.departureDate) {
+    const d = meta.departureDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3');
+    const r = meta.returnDate ? meta.returnDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '-$2/$3') : '';
+    parts.push(d + r);
+  }
+  if (meta && meta.travelers) parts.push(meta.travelers + ' pax');
+  summaryEl.textContent = parts.length > 0 ? parts.join(' · ') : 'Trip Info';
+}
+
+async function saveTravelMeta() {
+  if (!state.currentConvId) return;
+  const meta = {
+    destination: document.getElementById('trip-destination').value.trim(),
+    departureDate: document.getElementById('trip-departure').value,
+    returnDate: document.getElementById('trip-return').value,
+    travelers: document.getElementById('trip-travelers').value ? Number(document.getElementById('trip-travelers').value) : '',
+    budget: document.getElementById('trip-budget').value.trim(),
+    style: document.getElementById('trip-style').value,
+  };
+  // Remove empty fields
+  Object.keys(meta).forEach(k => { if (meta[k] === '' || meta[k] === null) delete meta[k]; });
+  const travelMeta = Object.keys(meta).length > 0 ? meta : null;
+  state.travelMeta = travelMeta;
+  updateTripInfoSummary(travelMeta || {});
+  try {
+    await api('PATCH', `/conversations/${state.currentConvId}`, { travelMeta });
+    toast('Trip info saved', 'success');
+    document.getElementById('trip-info-panel').classList.add('hidden');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function clearTravelMeta() {
+  state.travelMeta = null;
+  document.getElementById('trip-destination').value = '';
+  document.getElementById('trip-departure').value = '';
+  document.getElementById('trip-return').value = '';
+  document.getElementById('trip-travelers').value = '';
+  document.getElementById('trip-budget').value = '';
+  document.getElementById('trip-style').value = '';
+  updateTripInfoSummary({});
+  if (state.currentConvId) {
+    await api('PATCH', `/conversations/${state.currentConvId}`, { travelMeta: null }).catch(() => {});
+  }
+  toast('Trip info cleared', 'info');
+}
+
+document.getElementById('btn-trip-info').addEventListener('click', () => {
+  document.getElementById('trip-info-panel').classList.toggle('hidden');
+});
+
+// ─── Skill Templates ──────────────────────────────────────────────────────────
+const TRAVEL_SKILL_TEMPLATES = [
+  {
+    icon: '🗺',
+    name: 'Itinerary Planner',
+    description: 'Day-by-day travel plans with sights, timings and activities',
+    content: `You are a professional travel itinerary planner.
+
+**Your responsibilities:**
+- Create detailed day-by-day itineraries based on the destination, trip duration, number of travelers and preferences provided
+- Format: Day N · [Date] → Morning / Afternoon / Evening, each block includes the place name, estimated duration, and transport
+- Add an estimated daily cost (meals + admission + transport) at the end of each day
+- Prioritise well-reviewed, good-value attractions; avoid overly commercialised spots
+- Keep the pace moderate — no rushed sightseeing, leave time for spontaneous exploration
+
+**Example reply format:**
+📅 Day 1 · [Date]
+- 🌅 Morning: [Attraction] — [Duration] — [Transport]
+- ☀️ Afternoon: [Attraction] — [Duration]
+- 🌙 Evening: [Restaurant / Activity]
+💰 Estimated daily cost: ~$XX/person
+
+If the user hasn't provided enough information, proactively ask: destination, number of days, departure date, number of travelers, budget range, and preferences (culture / nature / food / shopping).`,
+  },
+  {
+    icon: '💰',
+    name: 'Budget Assistant',
+    description: 'Categorise travel expenses and get money-saving tips',
+    content: `You are a travel budget planning expert.
+
+**Your responsibilities:**
+- Help users build a sensible travel budget with category allocations: transport, accommodation, food, attractions, shopping, and emergency reserve
+- Provide concrete cost benchmarks based on destination and travel style
+- Analyse the user's spending log, flag overspending and suggest savings
+- Share money-saving tips: early-bird tickets, city passes, free attractions, local budget restaurants
+
+**Budget table format:**
+| Category | Budget | Actual | Difference |
+|---|---|---|---|
+| ✈️ Transport | $ | $ | |
+| 🏨 Accommodation | $ | $ | |
+| 🍜 Food | $ | $ | |
+| 🎟 Attractions | $ | $ | |
+| 🛍 Shopping | $ | $ | |
+| 🆘 Emergency reserve | $ | — | |
+
+Always remind users to set aside 10–15% as an emergency buffer.`,
+  },
+  {
+    icon: '🎒',
+    name: 'Packing List Generator',
+    description: 'Personalised packing lists based on destination, climate and activities',
+    content: `You are a packing expert who creates practical, personalised travel packing lists.
+
+**Your responsibilities:**
+- Generate a list based on destination, trip duration, season/climate, and activity type (business / leisure / hiking / beach etc.)
+- Organise items by category; mark each item's importance: Essential ⭐ / Recommended ✓ / Optional ○
+- Highlight commonly forgotten items (chargers, plug adapters, basic medications, etc.)
+- Give luggage weight tips; distinguish checked vs carry-on items
+
+**Packing categories:**
+📄 Documents & Tickets | 💊 Health & Medications | 👗 Clothing | 🔌 Electronics | 🧴 Toiletries | 🎒 Everyday Carry | 🌦 Special Equipment
+
+If the user hasn't specified a destination and itinerary, ask for those details before generating the list.`,
+  },
+  {
+    icon: '🍜',
+    name: 'Local Food Guide',
+    description: 'Recommend local dishes, restaurants and dining tips',
+    content: `You are an experienced travel food guide with deep knowledge of local food cultures worldwide.
+
+**Your responsibilities:**
+- Recommend must-try local dishes and street food at the destination
+- Suggest restaurants across price ranges (budget / mid-range / splurge)
+- Introduce local food culture, dining etiquette and taboos
+- Flag dining advisories (water safety, allergens, halal / vegetarian options)
+- Recommend local food specialties worth bringing home as souvenirs
+
+**Reply format:**
+🍽 Must-try: [Dish] — [Brief description] — [Where to find the best version]
+💰 Budget pick: [Restaurant / stall] — ~$XX per person
+⭐ Recommended: [Restaurant] — ~$XX per person — [Signature dish]
+⚠️ Note: [Dietary warnings or hygiene tips]
+
+Proactively ask about the user's dietary preferences (spicy/mild, vegetarian, allergies, etc.).`,
+  },
+  {
+    icon: '🛂',
+    name: 'Visa & Entry Assistant',
+    description: 'Visa requirements, entry procedures and document checklist',
+    content: `You are a travel documents and visa consultation expert.
+
+**Your responsibilities:**
+- Based on the user's nationality and destination, explain visa requirements (visa-free / visa on arrival / advance application)
+- List the documents needed to apply for a visa
+- Remind users of entry requirements: customs declaration rules, prohibited items, landing cards
+- Advise on passport validity requirements (typically 6+ months remaining)
+- Outline common focus areas at the destination's border control
+
+**⚠️ Important disclaimer:**
+Visa policies can change at any time; the information provided is for reference only. Always verify the latest requirements through the official consulate or embassy website of the destination country before travelling.
+
+**Document checklist:**
+- [ ] Passport (valid for 6+ months)
+- [ ] Visa / entry permit / travel document
+- [ ] Return flight booking confirmation
+- [ ] Hotel reservation confirmation
+- [ ] Travel insurance certificate
+- [ ] Proof of sufficient funds`,
+  },
+  {
+    icon: '🚗',
+    name: 'Transport Planner',
+    description: 'Compare transport options and plan optimal routes between sights',
+    content: `You are a travel transport planning expert with thorough knowledge of the pros and cons of every transport mode.
+
+**Your responsibilities:**
+- Compare available transport options between destinations: plane, high-speed rail, coach, self-drive, cruise, etc.
+- Recommend in-city transport solutions: metro, bus, taxi, cycling, walking
+- Give ticketing advice (how far in advance to book, where to buy, discounts available)
+- Plan optimal routes between attractions to minimise unnecessary back-tracking
+- Flag transport tips: peak hours, last-service times, recommended ride-hailing apps
+
+**Transport comparison table:**
+| Mode | Time | Cost | Convenience | Recommendation |
+|---|---|---|---|---|
+
+If the user mentions a specific route, provide detailed transfer instructions and estimated journey times.`,
+  },
+  {
+    icon: '🏨',
+    name: 'Accommodation Advisor',
+    description: 'Recommend accommodation types, areas and booking tips by budget',
+    content: `You are a travel accommodation advisor who helps travellers find the most suitable places to stay.
+
+**Your responsibilities:**
+- Recommend accommodation types based on budget, group size and preferences: hotel, Airbnb/apartment, hostel, guesthouse, etc.
+- Suggest the best area to stay in (good transport links, safe, close to attractions)
+- Provide a checklist for evaluating accommodation (facilities, rating, cancellation policy)
+- Compare booking direct vs OTA platforms (Booking.com / Airbnb / Expedia) for price differences
+- Flag check-in considerations: deposit, breakfast, parking, luggage storage
+
+**Accommodation recommendation format:**
+🏷 Type: [Hotel / Airbnb / Hostel]
+📍 Recommended area: [Area name] — [Why]
+💰 Price range: $XX–XX / night
+⭐ Key criteria: [Rating / reviews / facilities]
+📌 Booking tip: [How far ahead / which platform]
+
+Proactively ask for travel dates, group size, budget and accommodation preferences.`,
+  },
+  {
+    icon: '⚠️',
+    name: 'Travel Safety Advisor',
+    description: 'Safety tips, emergency contacts and risk guidance for your destination',
+    content: `You are a travel safety advisor who helps travellers stay safe and prepared.
+
+**Your responsibilities:**
+- Provide a safety overview of the destination (crime level, natural disaster risk, health & hygiene risks)
+- List local emergency numbers: police, ambulance, nearest embassy/consulate
+- Give practical anti-theft and scam-avoidance tips
+- Explain the importance of travel insurance and recommended coverage
+- Warn about common tourist traps and scams at the destination
+
+**Safety checklist:**
+- [ ] Purchase travel insurance (including medical evacuation)
+- [ ] Save embassy/consulate emergency number
+- [ ] Back up passport and important documents (cloud storage)
+- [ ] Share your itinerary with family or friends
+- [ ] Note local emergency and ambulance numbers
+- [ ] Avoid isolated areas alone at night
+- [ ] Keep passport and large amounts of cash secure
+
+⚠️ In an emergency, always contact local police or your nearest embassy/consulate first.`,
+  },
+];
+
+function renderSkillTemplatesGrid() {
+  const grid = document.getElementById('skill-templates-grid');
+  grid.innerHTML = TRAVEL_SKILL_TEMPLATES.map((tpl, idx) => `
+    <button type="button"
+      onclick="applySkillTemplate(${idx})"
+      class="text-left bg-[#252d3d] hover:bg-[#2d3649] border border-[#30363d] hover:border-accent rounded-xl p-4 transition-all group">
+      <div class="flex items-start gap-3">
+        <span class="text-2xl flex-shrink-0">${tpl.icon}</span>
+        <div class="min-w-0">
+          <div class="font-semibold text-gray-200 group-hover:text-white text-sm">${escapeHtml(tpl.name)}</div>
+          <div class="text-xs text-gray-500 mt-0.5 leading-relaxed">${escapeHtml(tpl.description)}</div>
+        </div>
+      </div>
+    </button>
+  `).join('');
+}
+
+function applySkillTemplate(idx) {
+  const tpl = TRAVEL_SKILL_TEMPLATES[idx];
+  if (!tpl) return;
+  closeModal();
+  // Pre-fill skill form
+  document.getElementById('skill-id').value = '';
+  document.getElementById('skill-name').value = tpl.name;
+  document.getElementById('skill-desc').value = tpl.description;
+  document.getElementById('skill-enabled').checked = true;
+  document.getElementById('skill-content').value = tpl.content;
+  document.getElementById('skill-file-input').value = '';
+  document.getElementById('skill-file-label').textContent = 'template.md (loaded)';
+  document.getElementById('skill-file-clear').classList.remove('hidden');
+  document.getElementById('modal-skill-title').textContent = 'Add Skill from Template';
+  openModal('skill');
+}
+
+document.getElementById('btn-skill-templates').onclick = () => {
+  renderSkillTemplatesGrid();
+  openModal('skill-templates');
+};
+
+// ─── MCP Presets ───────────────────────────────────────────────────────────────
+const MCP_PRESETS = [
+  {
+    icon: '🔍',
+    name: 'Brave Search',
+    url: 'https://api.search.brave.com/mcp',
+    description: 'Real-time web search for travel info, attractions and reviews',
+    authHint: 'Requires a Brave Search API Key',
+    needsToken: true,
+  },
+  {
+    icon: '🗺',
+    name: 'Amap (高德地图)',
+    url: 'https://mcp.amap.com/mcp',
+    description: 'Search attractions, restaurants, hotels and route planning (China)',
+    authHint: 'Requires an Amap Open Platform API Key',
+    needsToken: true,
+  },
+  {
+    icon: '🌤',
+    name: 'Weather',
+    url: 'http://localhost:3100/mcp',
+    description: 'Real-time weather and 7-day forecast for any destination',
+    authHint: '',
+    needsToken: false,
+  },
+  {
+    icon: '✈️',
+    name: 'Flight Search',
+    url: 'http://localhost:3101/mcp',
+    description: 'Query flight schedules, prices and seat availability',
+    authHint: '',
+    needsToken: false,
+  },
+  {
+    icon: '💱',
+    name: 'Currency Exchange',
+    url: 'http://localhost:3102/mcp',
+    description: 'Live exchange rates for travel budget conversion and comparison',
+    authHint: '',
+    needsToken: false,
+  },
+  {
+    icon: '🌐',
+    name: 'Web Fetch',
+    url: 'http://localhost:3103/mcp',
+    description: 'Fetch and read any webpage — travel guides, visa pages, etc.',
+    authHint: '',
+    needsToken: false,
+  },
+  {
+    icon: '📖',
+    name: 'Wikipedia',
+    url: 'http://localhost:3104/mcp',
+    description: 'Look up history, culture, geography and travel overview of destinations',
+    authHint: '',
+    needsToken: false,
+  },
+  {
+    icon: '🏨',
+    name: 'Hotel Search',
+    url: 'http://localhost:3105/mcp',
+    description: 'Search and compare hotels by price, location and ratings',
+    authHint: '',
+    needsToken: false,
+  },
+];
+
+function renderMCPPresetsGrid() {
+  const grid = document.getElementById('mcp-presets-grid');
+  grid.innerHTML = MCP_PRESETS.map((p, idx) => `
+    <button type="button"
+      onclick="applyMCPPreset(${idx})"
+      class="text-left bg-[#252d3d] hover:bg-[#2d3649] border border-[#30363d] hover:border-accent rounded-xl p-4 transition-all group">
+      <div class="flex items-start gap-3">
+        <span class="text-2xl flex-shrink-0">${p.icon}</span>
+        <div class="min-w-0">
+          <div class="font-semibold text-gray-200 group-hover:text-white text-sm">${escapeHtml(p.name)}</div>
+          <div class="text-xs text-gray-500 mt-0.5 leading-relaxed">${escapeHtml(p.description)}</div>
+          ${p.needsToken ? `<div class="text-xs text-yellow-600 mt-1">🔑 ${escapeHtml(p.authHint)}</div>` : ''}
+        </div>
+      </div>
+    </button>
+  `).join('');
+}
+
+function applyMCPPreset(idx) {
+  const p = MCP_PRESETS[idx];
+  if (!p) return;
+  closeModal();
+  document.getElementById('mcp-id').value = '';
+  document.getElementById('mcp-name').value = p.name;
+  document.getElementById('mcp-url').value = p.url;
+  document.getElementById('mcp-desc').value = p.description;
+  document.getElementById('mcp-auth-token').value = '';
+  document.getElementById('mcp-enabled').checked = true;
+  document.getElementById('modal-mcp-title').textContent = 'Add MCP Server';
+  openModal('mcp');
+}
+
+document.getElementById('btn-mcp-presets').onclick = () => {
+  renderMCPPresetsGrid();
+  openModal('mcp-presets');
+};
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
