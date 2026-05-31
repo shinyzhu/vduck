@@ -56,7 +56,7 @@ app.use('/api/skills', apiLimiter, skillsRouter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.0.0' });
+  res.json({ status: 'ok', version: '1.1.0' });
 });
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────
