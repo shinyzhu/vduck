@@ -24,7 +24,7 @@ router.post('/:conversationId', async (req, res) => {
   const conv = store.getConversation(conversationId);
   if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
-  const { message, files, providerId, model: reqModel, useTools = true, enabledMcpServers, enabledSkills, travelMeta: reqTravelMeta, options = {} } = req.body || {};
+  const { message, files, providerId, model: reqModel, useTools = true, enabledMcpServers, enabledSkills, options = {} } = req.body || {};
   const model = reqModel || conv.model || '';
   const effectiveProviderId = providerId || conv.providerId || undefined;
   if ((!message && (!files || files.length === 0)) || !model) {
@@ -36,23 +36,14 @@ router.post('/:conversationId', async (req, res) => {
   const rejectedFiles = [];
   if (Array.isArray(files)) {
     for (const f of files) {
-      if (!f || typeof f.name !== 'string') continue;
-      if (f.isImage) {
-        // Image: must have a data URL
-        if (typeof f.dataUrl !== 'string' || !f.dataUrl.startsWith('data:image/')) continue;
-        if (f.dataUrl.length > 5 * 1024 * 1024) { // ~4 MB raw
-          rejectedFiles.push(f.name);
-          continue;
-        }
-        validFiles.push({ name: f.name.slice(0, 255), isImage: true, dataUrl: f.dataUrl, mimeType: f.mimeType || 'image/jpeg' });
-      } else {
-        if (typeof f.content !== 'string') continue;
-        if (f.content.length > 1024 * 1024) {
-          rejectedFiles.push(f.name);
-          continue;
-        }
-        validFiles.push({ name: f.name.slice(0, 255), content: f.content });
+      if (!f || typeof f.name !== 'string' || typeof f.content !== 'string') {
+        continue;
       }
+      if (f.content.length > 1024 * 1024) {
+        rejectedFiles.push(f.name);
+        continue;
+      }
+      validFiles.push({ name: f.name.slice(0, 255), content: f.content });
     }
     if (rejectedFiles.length > 0) {
       console.warn(`Rejected files exceeding size limit: ${rejectedFiles.join(', ')}`);
@@ -81,10 +72,8 @@ router.post('/:conversationId', async (req, res) => {
     store.updateConversation(conversationId, convUpdates);
   }
 
-  // Persist the user message (store file metadata only, not full content)
-  const filesMeta = validFiles.length > 0
-    ? validFiles.map((f) => f.isImage ? { name: f.name, isImage: true } : { name: f.name })
-    : undefined;
+  // Persist the user message (store file metadata, not full content, to keep store lean)
+  const filesMeta = validFiles.length > 0 ? validFiles.map((f) => ({ name: f.name })) : undefined;
   store.addMessage(conversationId, { role: 'user', content: message || '', files: filesMeta });
 
   // Set up SSE
@@ -113,28 +102,11 @@ router.post('/:conversationId', async (req, res) => {
     // Inject file content into the last user message for the LLM
     if (validFiles.length > 0) {
       const lastMsg = messages[messages.length - 1];
+      const fileBlocks = validFiles.map(
+        (f) => `[File: ${f.name}]\n\`\`\`\n${f.content}\n\`\`\``
+      ).join('\n\n');
       const userText = lastMsg.content || '';
-      const textFiles = validFiles.filter(f => !f.isImage);
-      const imageFiles = validFiles.filter(f => f.isImage);
-
-      if (imageFiles.length > 0) {
-        // Vision multipart format
-        const parts = [];
-        if (textFiles.length > 0) {
-          const fileBlocks = textFiles.map(f => `[File: ${f.name}]\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n');
-          parts.push({ type: 'text', text: fileBlocks + (userText ? '\n\n' + userText : '') });
-        } else if (userText) {
-          parts.push({ type: 'text', text: userText });
-        }
-        for (const img of imageFiles) {
-          parts.push({ type: 'image_url', image_url: { url: img.dataUrl } });
-        }
-        lastMsg.content = parts;
-      } else {
-        // Text-only files: inject as code blocks
-        const fileBlocks = textFiles.map(f => `[File: ${f.name}]\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n');
-        lastMsg.content = fileBlocks + (userText ? '\n\n' + userText : '');
-      }
+      lastMsg.content = fileBlocks + (userText ? '\n\n' + userText : '');
     }
 
     // Get MCP tools if requested
@@ -168,24 +140,6 @@ router.post('/:conversationId', async (req, res) => {
         role: 'system',
         content: `The following are skill instructions:\n\n${skillContent}`,
       });
-    }
-
-    // Inject travel metadata as a system context message (highest priority — prepended last)
-    const effectiveTravelMeta = reqTravelMeta !== undefined ? reqTravelMeta : conv.travelMeta;
-    if (effectiveTravelMeta && typeof effectiveTravelMeta === 'object') {
-      const parts = [];
-      if (effectiveTravelMeta.destination) parts.push(`目的地：${effectiveTravelMeta.destination}`);
-      if (effectiveTravelMeta.departureDate) parts.push(`出发日期：${effectiveTravelMeta.departureDate}`);
-      if (effectiveTravelMeta.returnDate) parts.push(`返回日期：${effectiveTravelMeta.returnDate}`);
-      if (effectiveTravelMeta.travelers) parts.push(`出行人数：${effectiveTravelMeta.travelers}人`);
-      if (effectiveTravelMeta.budget) parts.push(`预算：${effectiveTravelMeta.budget}`);
-      if (effectiveTravelMeta.style) parts.push(`出行风格：${effectiveTravelMeta.style}`);
-      if (parts.length > 0) {
-        messages.unshift({
-          role: 'system',
-          content: `以下是本次旅行的基本信息，请在回答时结合这些信息：\n\n${parts.join('\n')}`,
-        });
-      }
     }
 
     let assistantMessage = null;

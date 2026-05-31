@@ -46,14 +46,13 @@ function saveStore() {
 
 function listConversations() {
   return store.conversations
-    .map(({ id, title, model, providerId, enabledMcpServers, enabledSkills, travelMeta, createdAt, updatedAt, messageCount }) => ({
+    .map(({ id, title, model, providerId, enabledMcpServers, enabledSkills, createdAt, updatedAt, messageCount }) => ({
       id,
       title,
       model,
       providerId,
       enabledMcpServers,
       enabledSkills,
-      travelMeta: travelMeta || null,
       createdAt,
       updatedAt,
       messageCount,
@@ -65,7 +64,7 @@ function getConversation(id) {
   return store.conversations.find((c) => c.id === id) || null;
 }
 
-function createConversation({ title = 'New Chat', model = '', providerId = '', enabledMcpServers = null, enabledSkills = null, travelMeta = null } = {}) {
+function createConversation({ title = 'New Chat', model = '', providerId = '', enabledMcpServers = null, enabledSkills = null } = {}) {
   const now = new Date().toISOString();
   const conv = {
     id: uuidv4(),
@@ -74,7 +73,6 @@ function createConversation({ title = 'New Chat', model = '', providerId = '', e
     providerId,
     enabledMcpServers,
     enabledSkills,
-    travelMeta,
     messages: [],
     messageCount: 0,
     createdAt: now,
